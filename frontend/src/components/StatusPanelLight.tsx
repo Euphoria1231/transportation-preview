@@ -41,21 +41,21 @@ export function StatusPanel({ config, simulation, connectionStatus }: StatusPane
   ]
 
   return (
-    <section className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4 shadow-2xl shadow-black/20 backdrop-blur">
+    <section className="rounded-2xl border border-slate-200 bg-white/88 p-4 shadow-xl shadow-slate-200/70 backdrop-blur">
       <div className="mb-4">
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-400">状态</p>
-        <h2 className="text-lg font-semibold text-white">实时指标</h2>
+        <p className="text-xs tracking-[0.28em] text-slate-500">状态</p>
+        <h2 className="text-lg font-semibold text-slate-900">实时指标</h2>
       </div>
 
-      <div className="mb-4 flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2">
-        <span className="text-sm text-slate-300">数据流</span>
+      <div className="mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-2">
+        <span className="text-sm text-slate-600">数据流</span>
         <span
           className={`rounded-full px-3 py-1 text-xs font-semibold ${
             connectionStatus === 'open'
-              ? 'bg-sky-500/20 text-sky-100'
+              ? 'bg-sky-100 text-sky-700'
               : connectionStatus === 'error'
-                ? 'bg-rose-500/20 text-rose-100'
-                : 'bg-slate-700/80 text-slate-200'
+                ? 'bg-rose-100 text-rose-700'
+                : 'bg-slate-200 text-slate-700'
           }`}
         >
           {formatConnectionStatus(connectionStatus)}
@@ -65,22 +65,22 @@ export function StatusPanel({ config, simulation, connectionStatus }: StatusPane
       <div className="grid grid-cols-2 gap-3">
         {stats.map((item) => (
           <div
-            className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-3"
+            className="rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-3"
             key={item.label}
           >
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
-            <p className="mt-2 text-xl font-semibold text-white">{item.value}</p>
+            <p className="text-xs tracking-[0.18em] text-slate-500">{item.label}</p>
+            <p className="mt-2 text-xl font-semibold text-slate-900">{item.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-slate-800/80 bg-slate-900/80 p-4">
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">交通流</p>
-            <h3 className="text-sm font-semibold text-slate-100">路网指标</h3>
+            <p className="text-xs tracking-[0.22em] text-slate-500">交通流</p>
+            <h3 className="text-sm font-semibold text-slate-900">路网指标</h3>
           </div>
-          <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200">
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
             实时计算
           </span>
         </div>
@@ -112,7 +112,7 @@ export function StatusPanel({ config, simulation, connectionStatus }: StatusPane
       </div>
 
       {simulation?.error ? (
-        <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           {simulation.error}
         </div>
       ) : null}
@@ -122,9 +122,9 @@ export function StatusPanel({ config, simulation, connectionStatus }: StatusPane
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-800/90 bg-slate-950/70 px-3 py-3">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-white">{value}</p>
+    <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-3">
+      <p className="text-[11px] tracking-[0.18em] text-slate-500">{label}</p>
+      <p className="mt-2 text-lg font-semibold text-slate-900">{value}</p>
     </div>
   )
 }
@@ -145,10 +145,10 @@ function ProgressMetric({
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between text-sm">
-        <span className="text-slate-300">{label}</span>
-        <span className="font-medium text-slate-100">{value}</span>
+        <span className="text-slate-600">{label}</span>
+        <span className="font-medium text-slate-900">{value}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+      <div className="h-2 overflow-hidden rounded-full bg-slate-200">
         <div
           className={`h-full rounded-full bg-gradient-to-r ${fillClass}`}
           style={{ width: progress <= 0 ? '0%' : `${Math.max(6, progress * 100)}%` }}

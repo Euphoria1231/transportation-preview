@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { CanvasScene } from '../components/CanvasScene'
 import { ControlPanel } from '../components/ControlPanel'
 import { EventFeed } from '../components/EventFeed'
-import { StatusPanel } from '../components/StatusPanel'
+import { StatusPanel } from '../components/StatusPanelLight'
 import { useSimulationStream } from '../hooks/useSimulationStream'
 import { fetchConfig, sendSimulationCommand } from '../services/api'
 import type { NetworkConfig } from '../types/simulation'
@@ -59,14 +59,14 @@ export function SimulationView() {
   }
 
   return (
-    <main className="grid min-h-screen grid-cols-[minmax(0,1fr)_360px] gap-5 p-5">
-      <section className="min-h-[calc(100vh-2.5rem)]">
+    <main className="grid h-screen grid-cols-[minmax(0,1fr)_360px] gap-5 overflow-hidden p-5">
+      <section className="min-h-0">
         {loading ? (
-          <div className="flex h-full items-center justify-center rounded-[28px] border border-slate-800/70 bg-slate-950/70 text-slate-300">
-            Loading network...
+          <div className="flex h-full items-center justify-center rounded-[28px] border border-slate-200 bg-white/80 text-slate-600 shadow-xl shadow-slate-200/70">
+            正在加载路网...
           </div>
         ) : fetchError ? (
-          <div className="flex h-full items-center justify-center rounded-[28px] border border-rose-500/40 bg-rose-500/10 px-8 text-center text-rose-100">
+          <div className="flex h-full items-center justify-center rounded-[28px] border border-rose-200 bg-rose-50 px-8 text-center text-rose-700 shadow-xl shadow-rose-100/80">
             {fetchError}
           </div>
         ) : (
@@ -79,7 +79,7 @@ export function SimulationView() {
         )}
       </section>
 
-      <aside className="flex min-h-[calc(100vh-2.5rem)] flex-col gap-4">
+      <aside className="panel-scroll flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
         <ControlPanel
           busy={busy}
           onPause={() => runCommand('pause')}
@@ -89,7 +89,7 @@ export function SimulationView() {
           onStep={() => runCommand('step')}
           running={simulation?.running ?? false}
         />
-        <StatusPanel connectionStatus={connectionStatus} simulation={simulation} />
+        <StatusPanel config={config} connectionStatus={connectionStatus} simulation={simulation} />
         <EventFeed event={simulation?.lastLaneChangeEvent ?? null} />
       </aside>
     </main>

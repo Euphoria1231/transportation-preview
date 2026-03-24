@@ -86,25 +86,25 @@ export function CanvasScene({ config, vehicles, snapshotTick }: CanvasSceneProps
   }, [config, size.height, size.width, stepLengthMs, viewport])
 
   return (
-    <div className="relative h-full w-full rounded-[28px] border border-slate-800/70 bg-slate-950/80 shadow-2xl shadow-black/30">
+    <div className="relative h-full w-full rounded-[28px] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/80">
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between px-5 py-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Scenario</p>
-          <h1 className="text-xl font-semibold text-white">Mixed Traffic SUMO Browser View</h1>
+          <p className="text-xs tracking-[0.28em] text-slate-500">场景</p>
+          <h1 className="text-xl font-semibold text-slate-900">混合交通 SUMO 可视化</h1>
         </div>
         <button
-          className="pointer-events-auto rounded-full border border-slate-700 bg-slate-900/80 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+          className="pointer-events-auto rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
           onClick={resetViewport}
           type="button"
         >
-          Fit To View
+          适应视图
         </button>
       </div>
 
       <div className="h-full w-full p-3 pt-16" ref={wrapperRef}>
         <canvas
           {...canvasHandlers}
-          className="h-full w-full cursor-grab rounded-[24px] bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.08),_transparent_40%),linear-gradient(180deg,_rgba(15,23,42,0.95),_rgba(2,6,23,0.96))] active:cursor-grabbing"
+          className="h-full w-full cursor-grab rounded-[24px] bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.14),_transparent_42%),linear-gradient(180deg,_rgba(248,250,252,0.96),_rgba(226,232,240,0.94))] active:cursor-grabbing"
           ref={canvasRef}
         />
       </div>
@@ -118,21 +118,35 @@ function drawLanes(
   viewport: { scale: number; offsetX: number; offsetY: number },
 ) {
   for (const lane of config.lanes) {
-    context.beginPath()
-    lane.shape.forEach(([x, y], index) => {
-      const screenX = x * viewport.scale + viewport.offsetX
-      const screenY = viewport.offsetY - y * viewport.scale
-      if (index === 0) {
-        context.moveTo(screenX, screenY)
-      } else {
-        context.lineTo(screenX, screenY)
-      }
-    })
+    const lineWidth = lane.edgeId.startsWith('E') ? 13 : 11
+    const shoulderWidth = lineWidth + 6
+    const isOuterLane = lane.index === 0
 
+    traceLanePath(context, lane.shape, viewport)
     context.lineCap = 'round'
-    context.strokeStyle = lane.edgeId.startsWith('E') ? 'rgba(148, 163, 184, 0.85)' : 'rgba(51, 65, 85, 0.95)'
-    context.lineWidth = lane.edgeId.startsWith('E') ? 8 : 6
+    context.strokeStyle = 'rgba(2, 6, 23, 0.65)'
+    context.lineWidth = shoulderWidth + 8
+    context.shadowColor = 'rgba(15, 23, 42, 0.45)'
+    context.shadowBlur = 22
     context.stroke()
+
+    traceLanePath(context, lane.shape, viewport)
+    context.shadowBlur = 0
+    context.strokeStyle = lane.edgeId.startsWith('E') ? 'rgba(45, 55, 72, 0.97)' : 'rgba(28, 37, 52, 0.96)'
+    context.lineWidth = shoulderWidth
+    context.stroke()
+
+    traceLanePath(context, lane.shape, viewport)
+    context.strokeStyle = 'rgba(109, 123, 141, 0.18)'
+    context.lineWidth = lineWidth * 0.78
+    context.stroke()
+
+    traceLanePath(context, lane.shape, viewport)
+    context.lineWidth = isOuterLane ? 1.8 : 1.2
+    context.strokeStyle = isOuterLane ? 'rgba(248, 250, 252, 0.65)' : 'rgba(226, 232, 240, 0.36)'
+    context.setLineDash(isOuterLane ? [] : [10, 12])
+    context.stroke()
+    context.setLineDash([])
   }
 }
 
@@ -150,23 +164,172 @@ function drawVehicles(
     const angle = lerp(previous.angle, vehicle.angle, progress)
     const screenX = x * viewport.scale + viewport.offsetX
     const screenY = viewport.offsetY - y * viewport.scale
-    const width = Math.max(vehicle.length * viewport.scale, 10)
-    const height = Math.max(vehicle.width * viewport.scale, 5)
+    const width = Math.max(vehicle.length * viewport.scale, 18)
+    const height = Math.max(vehicle.width * viewport.scale, 8)
+    const bodyColor = normalizeVehicleColor(vehicle.color)
+    const isHeavyVehicle = /truck|bus|coach|delivery/i.test(vehicle.type)
+    const bodyRadius = Math.min(height * 0.42, isHeavyVehicle ? 5 : 7)
 
     context.save()
     context.translate(screenX, screenY)
-    context.rotate((-angle * Math.PI) / 180)
-    context.fillStyle = vehicle.color
-    context.shadowColor = vehicle.color
-    context.shadowBlur = 14
-    roundRect(context, -width / 2, -height / 2, width, height, height / 2)
+    context.rotate(((angle - 90) * Math.PI) / 180)
+
+    if (vehicle.speed > 6) {
+      const streak = Math.min(width * 0.4, 20)
+      const slipstream = context.createLinearGradient(-width / 2 - streak, 0, -width / 2, 0)
+      slipstream.addColorStop(0, 'rgba(125, 211, 252, 0)')
+      slipstream.addColorStop(1, 'rgba(125, 211, 252, 0.16)')
+      context.fillStyle = slipstream
+      context.beginPath()
+      context.ellipse(-width / 2 - streak * 0.2, 0, streak, height * 0.36, 0, 0, Math.PI * 2)
+      context.fill()
+    }
+
+    context.fillStyle = 'rgba(15, 23, 42, 0.35)'
+    context.beginPath()
+    context.ellipse(0, height * 0.18, width * 0.6, height * 0.55, 0, 0, Math.PI * 2)
     context.fill()
 
-    context.fillStyle = 'rgba(255,255,255,0.95)'
-    roundRect(context, width * 0.05, -height * 0.3, width * 0.22, height * 0.6, height * 0.2)
+    const bodyGradient = context.createLinearGradient(0, -height / 2, 0, height / 2)
+    bodyGradient.addColorStop(0, mixColor(bodyColor, '#f8fafc', 0.22))
+    bodyGradient.addColorStop(0.55, bodyColor)
+    bodyGradient.addColorStop(1, mixColor(bodyColor, '#020617', 0.3))
+
+    context.fillStyle = bodyGradient
+    context.strokeStyle = 'rgba(15, 23, 42, 0.55)'
+    context.lineWidth = 1
+    context.shadowColor = 'rgba(15, 23, 42, 0.4)'
+    context.shadowBlur = 10
+    roundRect(context, -width / 2, -height / 2, width, height, bodyRadius)
     context.fill()
+    context.stroke()
+    context.shadowBlur = 0
+
+    const roofWidth = isHeavyVehicle ? width * 0.58 : width * 0.5
+    const roofHeight = isHeavyVehicle ? height * 0.64 : height * 0.56
+    const roofStartX = isHeavyVehicle ? -width * 0.04 : -width * 0.02
+    const roofGradient = context.createLinearGradient(0, -roofHeight / 2, 0, roofHeight / 2)
+    roofGradient.addColorStop(0, 'rgba(226, 232, 240, 0.82)')
+    roofGradient.addColorStop(1, 'rgba(71, 85, 105, 0.92)')
+    context.fillStyle = roofGradient
+    roundRect(
+      context,
+      roofStartX - roofWidth / 2,
+      -roofHeight / 2,
+      roofWidth,
+      roofHeight,
+      roofHeight * 0.28,
+    )
+    context.fill()
+
+    context.fillStyle = 'rgba(15, 23, 42, 0.9)'
+    const wheelLength = Math.max(width * 0.18, 5)
+    const wheelWidth = Math.max(height * 0.16, 2)
+    const wheelOffsetX = width * 0.24
+    const wheelOffsetY = height * 0.5
+    drawWheel(context, -wheelOffsetX, -wheelOffsetY, wheelLength, wheelWidth)
+    drawWheel(context, wheelOffsetX, -wheelOffsetY, wheelLength, wheelWidth)
+    drawWheel(context, -wheelOffsetX, wheelOffsetY - wheelWidth, wheelLength, wheelWidth)
+    drawWheel(context, wheelOffsetX, wheelOffsetY - wheelWidth, wheelLength, wheelWidth)
+
+    context.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    roundRect(context, width * 0.28, -height * 0.2, width * 0.1, height * 0.14, height * 0.05)
+    context.fill()
+
+    context.fillStyle = 'rgba(248, 113, 113, 0.82)'
+    roundRect(context, -width * 0.38, -height * 0.22, width * 0.08, height * 0.16, height * 0.05)
+    context.fill()
+    roundRect(context, -width * 0.38, height * 0.06, width * 0.08, height * 0.16, height * 0.05)
+    context.fill()
+
+    context.strokeStyle = 'rgba(255,255,255,0.18)'
+    context.lineWidth = 1
+    context.beginPath()
+    context.moveTo(-width * 0.18, 0)
+    context.lineTo(width * 0.28, 0)
+    context.stroke()
+
     context.restore()
   })
+}
+
+function traceLanePath(
+  context: CanvasRenderingContext2D,
+  shape: Array<[number, number]>,
+  viewport: { scale: number; offsetX: number; offsetY: number },
+) {
+  context.beginPath()
+  shape.forEach(([x, y], index) => {
+    const screenX = x * viewport.scale + viewport.offsetX
+    const screenY = viewport.offsetY - y * viewport.scale
+    if (index === 0) {
+      context.moveTo(screenX, screenY)
+    } else {
+      context.lineTo(screenX, screenY)
+    }
+  })
+}
+
+function drawWheel(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  roundRect(context, x - width / 2, y, width, height, height / 2)
+  context.fill()
+}
+
+function normalizeVehicleColor(color: string) {
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color)) {
+    return color
+  }
+
+  if (color.startsWith('rgb') || color.startsWith('hsl')) {
+    return color
+  }
+
+  return '#38bdf8'
+}
+
+function mixColor(baseColor: string, mixTarget: string, amount: number) {
+  if (!baseColor.startsWith('#') || !mixTarget.startsWith('#')) {
+    return baseColor
+  }
+
+  const base = parseHexColor(baseColor)
+  const target = parseHexColor(mixTarget)
+  if (!base || !target) {
+    return baseColor
+  }
+
+  const mixed = base.map((channel, index) =>
+    Math.round(channel + (target[index] - channel) * amount),
+  )
+
+  return `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`
+}
+
+function parseHexColor(color: string) {
+  const hex = color.slice(1)
+  const normalized =
+    hex.length === 3
+      ? hex
+          .split('')
+          .map((value) => value + value)
+          .join('')
+      : hex
+
+  if (normalized.length !== 6) {
+    return null
+  }
+
+  return [
+    Number.parseInt(normalized.slice(0, 2), 16),
+    Number.parseInt(normalized.slice(2, 4), 16),
+    Number.parseInt(normalized.slice(4, 6), 16),
+  ]
 }
 
 function roundRect(

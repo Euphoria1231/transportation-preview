@@ -90,20 +90,23 @@ export function useCanvasViewport(bounds: Bounds | null, size: CanvasSize) {
         event.currentTarget.setPointerCapture(event.pointerId)
       },
       onPointerMove: (event: ReactPointerEvent<HTMLCanvasElement>) => {
-        if (!dragOriginRef.current) {
+        const dragOrigin = dragOriginRef.current
+        if (!dragOrigin) {
           return
         }
 
         const point = getLocalPoint(event.currentTarget, event)
         setViewport((current) => ({
           ...current,
-          offsetX: point.x - dragOriginRef.current!.x,
-          offsetY: point.y - dragOriginRef.current!.y,
+          offsetX: point.x - dragOrigin.x,
+          offsetY: point.y - dragOrigin.y,
         }))
       },
       onPointerUp: (event: ReactPointerEvent<HTMLCanvasElement>) => {
         dragOriginRef.current = null
-        event.currentTarget.releasePointerCapture(event.pointerId)
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId)
+        }
       },
       onPointerLeave: () => {
         dragOriginRef.current = null
