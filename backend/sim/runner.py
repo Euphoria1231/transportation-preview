@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import threading
 import time
-from typing import Dict, Generator, List, Optional
+from typing import Any, Callable, Dict, Generator, List, Optional
 import xml.etree.ElementTree as ET
 
 import traci
@@ -201,6 +201,21 @@ class SimulationRunner:
         for vehicle_id in vehicle_ids:
             vehicle_type = self._connection.vehicle.getTypeID(vehicle_id)
             x_coord, y_coord = self._connection.vehicle.getPosition(vehicle_id)
+            leader = self._safe_value(
+                lambda vehicle_id=vehicle_id: self._connection.vehicle.getLeader(vehicle_id, 250),
+                None,
+            )
+            leader_id: Optional[str] = None
+            leader_gap: Optional[float] = None
+            if leader:
+                leader_id = str(leader[0])
+                leader_gap = float(leader[1])
+
+            lateral_speed = self._safe_value(
+                lambda vehicle_id=vehicle_id: self._connection.vehicle.getLateralSpeed(vehicle_id),
+                0.0,
+            )
+            is_connected = vehicle_type == "Connected"
             vehicles.append(
                 {
                     "id": vehicle_id,
@@ -209,11 +224,38 @@ class SimulationRunner:
                     "y": y_coord,
                     "angle": self._connection.vehicle.getAngle(vehicle_id),
                     "speed": self._connection.vehicle.getSpeed(vehicle_id),
+                    "acceleration": self._safe_value(
+                        lambda vehicle_id=vehicle_id: self._connection.vehicle.getAcceleration(vehicle_id),
+                        0.0,
+                    ),
                     "edgeId": self._connection.vehicle.getRoadID(vehicle_id),
                     "laneId": self._connection.vehicle.getLaneID(vehicle_id),
                     "laneIndex": self._connection.vehicle.getLaneIndex(vehicle_id),
+                    "lanePosition": self._safe_value(
+                        lambda vehicle_id=vehicle_id: self._connection.vehicle.getLanePosition(vehicle_id),
+                        0.0,
+                    ),
                     "length": self._connection.vehicle.getLength(vehicle_id),
                     "width": self._connection.vehicle.getWidth(vehicle_id),
+                    "route": list(self._safe_value(
+                        lambda vehicle_id=vehicle_id: self._connection.vehicle.getRoute(vehicle_id),
+                        [],
+                    )),
+                    "leaderId": leader_id,
+                    "leaderGap": leader_gap,
+                    "isChangingLane": abs(float(lateral_speed)) > 0.05,
+                    "desiredSpeed": self._safe_value(
+                        lambda vehicle_id=vehicle_id: self._connection.vehicle.getMaxSpeed(vehicle_id),
+                        None,
+                    ) if is_connected else None,
+                    "desiredHeadway": self._safe_value(
+                        lambda vehicle_id=vehicle_id: self._connection.vehicle.getTau(vehicle_id),
+                        None,
+                    ) if is_connected else None,
+                    "desiredAcceleration": self._safe_value(
+                        lambda vehicle_id=vehicle_id: self._connection.vehicle.getAccel(vehicle_id),
+                        None,
+                    ) if is_connected else None,
                     "color": color_for_type(vehicle_type),
                 }
             )
@@ -252,3 +294,10 @@ class SimulationRunner:
                 return float(child.attrib["value"])
 
         return float(time_node.attrib.get("step-length", "0.1"))
+
+    @staticmethod
+    def _safe_value(operation: Callable[[], Any], default: Any) -> Any:
+        try:
+            return operation()
+        except Exception:
+            return default

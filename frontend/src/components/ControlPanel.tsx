@@ -1,11 +1,17 @@
 interface ControlPanelProps {
   running: boolean
   busy: boolean
+  replayMode: boolean
+  replayPercent: number
+  historyCount: number
+  replayTimeLabel: string
   onStart: () => Promise<void>
   onPause: () => Promise<void>
   onReset: () => Promise<void>
   onStep: () => Promise<void>
   onResetViewport: () => void
+  onReplayModeChange: (enabled: boolean) => void
+  onReplayPercentChange: (percent: number) => void
 }
 
 function PanelButton({
@@ -38,17 +44,23 @@ function PanelButton({
 export function ControlPanel({
   running,
   busy,
+  replayMode,
+  replayPercent,
+  historyCount,
+  replayTimeLabel,
   onStart,
   onPause,
   onReset,
   onStep,
   onResetViewport,
+  onReplayModeChange,
+  onReplayPercentChange,
 }: ControlPanelProps) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white/88 p-4 shadow-xl shadow-slate-200/70 backdrop-blur">
+    <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-xl shadow-slate-200/70 backdrop-blur">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <p className="text-xs tracking-[0.28em] text-slate-500">控制台</p>
+          <p className="text-xs tracking-[0.28em] text-slate-500">CONTROL</p>
           <h2 className="text-lg font-semibold text-slate-900">仿真控制</h2>
         </div>
         <span
@@ -69,6 +81,47 @@ export function ControlPanel({
 
       <div className="mt-3">
         <PanelButton disabled={busy} label="重置视图" onClick={onResetViewport} />
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/90 p-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs tracking-[0.2em] text-slate-500">REPLAY</p>
+            <h3 className="text-sm font-semibold text-slate-900">时间轴回放</h3>
+          </div>
+          <button
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              replayMode
+                ? 'bg-blue-100 text-blue-700'
+                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            } disabled:cursor-not-allowed disabled:opacity-50`}
+            disabled={historyCount < 2}
+            onClick={() => onReplayModeChange(!replayMode)}
+            type="button"
+          >
+            {replayMode ? '回放中' : '实时'}
+          </button>
+        </div>
+
+        <label className="block">
+          <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+            <span>{replayMode ? replayTimeLabel : '最近 60 秒缓存'}</span>
+            <span>{historyCount} 帧</span>
+          </div>
+          <input
+            className="w-full accent-blue-500 disabled:opacity-40"
+            disabled={historyCount < 2}
+            max={100}
+            min={0}
+            onChange={(event) => {
+              onReplayModeChange(true)
+              onReplayPercentChange(Number(event.target.value) / 100)
+            }}
+            step={1}
+            type="range"
+            value={Math.round(replayPercent * 100)}
+          />
+        </label>
       </div>
     </section>
   )

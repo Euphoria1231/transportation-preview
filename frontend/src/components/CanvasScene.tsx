@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
-import type { NetworkConfig, VehicleState } from '../types/simulation'
+import type { Lane, NetworkConfig, VehicleState } from '../types/simulation'
 
 interface CanvasSceneProps {
   config: NetworkConfig | null
   vehicles: VehicleState[]
   snapshotTick: number
+  selectedVehicleId: string | null
+  selectedLaneId: string | null
+  vehicleTrail: Array<{ x: number; y: number }>
+  routePath: Array<[number, number]>
+  onLaneSelect: (laneId: string | null) => void
+  onVehicleSelect: (vehicleId: string | null) => void
 }
 
 interface CanvasSize {
@@ -14,13 +21,24 @@ interface CanvasSize {
   height: number
 }
 
-export function CanvasScene({ config, vehicles, snapshotTick }: CanvasSceneProps) {
+export function CanvasScene({
+  config,
+  vehicles,
+  snapshotTick,
+  selectedVehicleId,
+  selectedLaneId,
+  vehicleTrail,
+  routePath,
+  onLaneSelect,
+  onVehicleSelect,
+}: CanvasSceneProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null)
   const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 })
   const previousVehiclesRef = useRef<Map<string, VehicleState>>(new Map())
   const currentVehiclesRef = useRef<Map<string, VehicleState>>(new Map())
-  const snapshotAtRef = useRef(performance.now())
+  const snapshotAtRef = useRef(0)
 
   const { viewport, resetViewport, canvasHandlers } = useCanvasViewport(config?.bounds ?? null, size)
 
@@ -76,14 +94,77 @@ export function CanvasScene({ config, vehicles, snapshotTick }: CanvasSceneProps
       context.clearRect(0, 0, size.width, size.height)
 
       drawLanes(context, config, viewport)
-      drawVehicles(context, currentVehiclesRef.current, previousVehiclesRef.current, viewport, progress)
+      if (selectedLaneId) {
+        drawSelectedLane(context, config, selectedLaneId, viewport)
+      }
+      drawRoutePath(context, routePath, viewport)
+      drawVehicleTrail(context, vehicleTrail, viewport)
+      drawVehicles(
+        context,
+        currentVehiclesRef.current,
+        previousVehiclesRef.current,
+        viewport,
+        progress,
+        selectedVehicleId,
+      )
 
       frameId = window.requestAnimationFrame(drawFrame)
     }
 
     frameId = window.requestAnimationFrame(drawFrame)
     return () => window.cancelAnimationFrame(frameId)
-  }, [config, size.height, size.width, stepLengthMs, viewport])
+  }, [
+    config,
+    routePath,
+    selectedLaneId,
+    selectedVehicleId,
+    size.height,
+    size.width,
+    stepLengthMs,
+    vehicleTrail,
+    viewport,
+  ])
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    pointerStartRef.current = getCanvasPoint(event.currentTarget, event)
+    canvasHandlers.onPointerDown(event)
+  }
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    canvasHandlers.onPointerMove(event)
+  }
+
+  const handlePointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const pointerStart = pointerStartRef.current
+    const pointerEnd = getCanvasPoint(event.currentTarget, event)
+    pointerStartRef.current = null
+    canvasHandlers.onPointerUp(event)
+
+    if (!config || !pointerStart) {
+      return
+    }
+
+    const movement = Math.hypot(pointerEnd.x - pointerStart.x, pointerEnd.y - pointerStart.y)
+    if (movement > 5) {
+      return
+    }
+
+    const selectedVehicle = findVehicleAtPoint(pointerEnd, vehicles, viewport)
+    if (selectedVehicle) {
+      onVehicleSelect(selectedVehicle.id)
+      onLaneSelect(null)
+      return
+    }
+
+    const selectedLane = findLaneAtPoint(pointerEnd, config.lanes, viewport)
+    onLaneSelect(selectedLane?.id ?? null)
+    onVehicleSelect(null)
+  }
+
+  const handlePointerLeave = () => {
+    pointerStartRef.current = null
+    canvasHandlers.onPointerLeave()
+  }
 
   return (
     <div className="relative h-full w-full rounded-[28px] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/80">
@@ -103,8 +184,12 @@ export function CanvasScene({ config, vehicles, snapshotTick }: CanvasSceneProps
 
       <div className="h-full w-full p-3 pt-16" ref={wrapperRef}>
         <canvas
-          {...canvasHandlers}
           className="h-full w-full cursor-grab rounded-[24px] bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.14),_transparent_42%),linear-gradient(180deg,_rgba(248,250,252,0.96),_rgba(226,232,240,0.94))] active:cursor-grabbing"
+          onPointerDown={handlePointerDown}
+          onPointerLeave={handlePointerLeave}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onWheel={canvasHandlers.onWheel}
           ref={canvasRef}
         />
       </div>
@@ -156,6 +241,7 @@ function drawVehicles(
   previousVehicles: Map<string, VehicleState>,
   viewport: { scale: number; offsetX: number; offsetY: number },
   progress: number,
+  selectedVehicleId: string | null,
 ) {
   currentVehicles.forEach((vehicle, id) => {
     const previous = previousVehicles.get(id) ?? vehicle
@@ -168,11 +254,26 @@ function drawVehicles(
     const height = Math.max(vehicle.width * viewport.scale, 8)
     const bodyColor = normalizeVehicleColor(vehicle.color)
     const isHeavyVehicle = /truck|bus|coach|delivery/i.test(vehicle.type)
+    const isConnected = /connected|cav/i.test(vehicle.type)
+    const isSelected = id === selectedVehicleId
     const bodyRadius = Math.min(height * 0.42, isHeavyVehicle ? 5 : 7)
 
     context.save()
     context.translate(screenX, screenY)
     context.rotate(((angle - 90) * Math.PI) / 180)
+
+    if (isSelected) {
+      context.fillStyle = 'rgba(250, 204, 21, 0.22)'
+      context.strokeStyle = 'rgba(250, 204, 21, 0.92)'
+      context.lineWidth = 2
+      context.shadowColor = 'rgba(250, 204, 21, 0.55)'
+      context.shadowBlur = 18
+      context.beginPath()
+      context.ellipse(0, 0, width * 0.86, height * 1.35, 0, 0, Math.PI * 2)
+      context.fill()
+      context.stroke()
+      context.shadowBlur = 0
+    }
 
     if (vehicle.speed > 6) {
       const streak = Math.min(width * 0.4, 20)
@@ -249,8 +350,105 @@ function drawVehicles(
     context.lineTo(width * 0.28, 0)
     context.stroke()
 
+    if (isConnected) {
+      context.strokeStyle = 'rgba(187, 247, 208, 0.92)'
+      context.lineWidth = Math.max(1.2, height * 0.08)
+      context.beginPath()
+      context.arc(width * 0.1, -height * 0.02, height * 0.2, 0, Math.PI * 2)
+      context.stroke()
+    }
+
+    if (vehicle.isChangingLane) {
+      context.strokeStyle = 'rgba(251, 191, 36, 0.95)'
+      context.lineWidth = Math.max(1.5, height * 0.12)
+      context.beginPath()
+      context.moveTo(-width * 0.05, -height * 0.95)
+      context.lineTo(width * 0.2, -height * 0.7)
+      context.lineTo(-width * 0.05, -height * 0.45)
+      context.stroke()
+    }
+
     context.restore()
   })
+}
+
+function drawSelectedLane(
+  context: CanvasRenderingContext2D,
+  config: NetworkConfig,
+  selectedLaneId: string,
+  viewport: { scale: number; offsetX: number; offsetY: number },
+) {
+  const lane = config.lanes.find((candidate) => candidate.id === selectedLaneId)
+  if (!lane) {
+    return
+  }
+
+  traceLanePath(context, lane.shape, viewport)
+  context.lineCap = 'round'
+  context.strokeStyle = 'rgba(250, 204, 21, 0.72)'
+  context.lineWidth = 24
+  context.shadowColor = 'rgba(250, 204, 21, 0.45)'
+  context.shadowBlur = 18
+  context.stroke()
+  context.shadowBlur = 0
+}
+
+function drawVehicleTrail(
+  context: CanvasRenderingContext2D,
+  trail: Array<{ x: number; y: number }>,
+  viewport: { scale: number; offsetX: number; offsetY: number },
+) {
+  if (trail.length < 2) {
+    return
+  }
+
+  context.save()
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.strokeStyle = 'rgba(34, 197, 94, 0.9)'
+  context.lineWidth = 3
+  context.shadowColor = 'rgba(34, 197, 94, 0.45)'
+  context.shadowBlur = 10
+  context.beginPath()
+  trail.forEach((point, index) => {
+    const screen = worldToScreen(point.x, point.y, viewport)
+    if (index === 0) {
+      context.moveTo(screen.x, screen.y)
+    } else {
+      context.lineTo(screen.x, screen.y)
+    }
+  })
+  context.stroke()
+  context.restore()
+}
+
+function drawRoutePath(
+  context: CanvasRenderingContext2D,
+  routePath: Array<[number, number]>,
+  viewport: { scale: number; offsetX: number; offsetY: number },
+) {
+  if (routePath.length < 2) {
+    return
+  }
+
+  context.save()
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.strokeStyle = 'rgba(59, 130, 246, 0.78)'
+  context.lineWidth = 4
+  context.setLineDash([14, 10])
+  context.beginPath()
+  routePath.forEach(([x, y], index) => {
+    const screen = worldToScreen(x, y, viewport)
+    if (index === 0) {
+      context.moveTo(screen.x, screen.y)
+    } else {
+      context.lineTo(screen.x, screen.y)
+    }
+  })
+  context.stroke()
+  context.setLineDash([])
+  context.restore()
 }
 
 function traceLanePath(
@@ -268,6 +466,100 @@ function traceLanePath(
       context.lineTo(screenX, screenY)
     }
   })
+}
+
+function findVehicleAtPoint(
+  point: { x: number; y: number },
+  vehicles: VehicleState[],
+  viewport: { scale: number; offsetX: number; offsetY: number },
+) {
+  const hitPadding = 7
+  for (let index = vehicles.length - 1; index >= 0; index -= 1) {
+    const vehicle = vehicles[index]
+    const screen = worldToScreen(vehicle.x, vehicle.y, viewport)
+    const width = Math.max(vehicle.length * viewport.scale, 18) + hitPadding
+    const height = Math.max(vehicle.width * viewport.scale, 8) + hitPadding
+    const angle = ((vehicle.angle - 90) * Math.PI) / 180
+    const cos = Math.cos(-angle)
+    const sin = Math.sin(-angle)
+    const dx = point.x - screen.x
+    const dy = point.y - screen.y
+    const localX = dx * cos - dy * sin
+    const localY = dx * sin + dy * cos
+
+    if (Math.abs(localX) <= width / 2 && Math.abs(localY) <= height / 2) {
+      return vehicle
+    }
+  }
+
+  return null
+}
+
+function findLaneAtPoint(
+  point: { x: number; y: number },
+  lanes: Lane[],
+  viewport: { scale: number; offsetX: number; offsetY: number },
+): Lane | null {
+  let closestLane: Lane | null = null
+  let closestDistance = Number.POSITIVE_INFINITY
+  const threshold = 12
+
+  for (const lane of lanes) {
+    for (let index = 1; index < lane.shape.length; index += 1) {
+      const start = worldToScreen(lane.shape[index - 1][0], lane.shape[index - 1][1], viewport)
+      const end = worldToScreen(lane.shape[index][0], lane.shape[index][1], viewport)
+      const distance = distanceToSegment(point, start, end)
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestLane = lane
+      }
+    }
+  }
+
+  return closestDistance <= threshold ? closestLane : null
+}
+
+function distanceToSegment(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+) {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const lengthSquared = dx * dx + dy * dy
+  if (lengthSquared === 0) {
+    return Math.hypot(point.x - start.x, point.y - start.y)
+  }
+
+  const progress = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared),
+  )
+  const closestX = start.x + progress * dx
+  const closestY = start.y + progress * dy
+  return Math.hypot(point.x - closestX, point.y - closestY)
+}
+
+function worldToScreen(
+  x: number,
+  y: number,
+  viewport: { scale: number; offsetX: number; offsetY: number },
+) {
+  return {
+    x: x * viewport.scale + viewport.offsetX,
+    y: viewport.offsetY - y * viewport.scale,
+  }
+}
+
+function getCanvasPoint(
+  target: HTMLCanvasElement,
+  event: ReactPointerEvent<HTMLCanvasElement>,
+) {
+  const rect = target.getBoundingClientRect()
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  }
 }
 
 function drawWheel(

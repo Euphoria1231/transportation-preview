@@ -52,11 +52,15 @@ export function useCanvasViewport(bounds: Bounds | null, size: CanvasSize) {
     const extraX = (usableWidth - worldWidth * scale) / 2
     const extraY = (usableHeight - worldHeight * scale) / 2
 
-    setViewport({
-      scale,
-      offsetX: PADDING + extraX - bounds.minX * scale,
-      offsetY: PADDING + extraY + bounds.maxY * scale,
+    const frameId = window.requestAnimationFrame(() => {
+      setViewport({
+        scale,
+        offsetX: PADDING + extraX - bounds.minX * scale,
+        offsetY: PADDING + extraY + bounds.maxY * scale,
+      })
     })
+
+    return () => window.cancelAnimationFrame(frameId)
   }, [bounds, resetRevision, size.height, size.width])
 
   const controls = useMemo(

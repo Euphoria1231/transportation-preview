@@ -80,9 +80,6 @@ export function StatusPanel({ config, simulation, connectionStatus }: StatusPane
             <p className="text-xs tracking-[0.22em] text-slate-500">交通流</p>
             <h3 className="text-sm font-semibold text-slate-900">路网指标</h3>
           </div>
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-            实时计算
-          </span>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
