@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 
 import traci
 
+TRACI_LABEL = "browser"
+
 from .logic import apply_lane_change_logic, color_for_type
 from .metrics import create_metric_sample, summarize_metric_history
 from .network import parse_network
@@ -269,9 +271,15 @@ class SimulationRunner:
             "--seed",
             str(self.current_scenario_config["randomSeed"]),
         ]
-        traci.start(cmd, label="browser")
-        self._connection = traci.getConnection("browser")
-        self._latest_state = self._snapshot_state()
+        try:
+            traci.start(cmd, label=TRACI_LABEL)
+            self._connection = traci.getConnection(TRACI_LABEL)
+            self._latest_state = self._snapshot_state()
+        except Exception:
+            self._connection = None
+            self._close_traci_label()
+            self._latest_state = self._empty_state()
+            raise
 
     def _append_metric_sample(self, lane_change_events: List[Dict[str, object]]) -> None:
         vehicles = list(self._latest_state.get("vehicles", []))
@@ -290,17 +298,26 @@ class SimulationRunner:
         self._metric_history.append(sample)
 
     def _close_connection(self) -> None:
-        if self._connection is None:
-            self._latest_state = self._empty_state()
-            return
+        connection = self._connection
+        self._connection = None
 
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
+        self._close_traci_label()
+
+        self._latest_state = self._empty_state()
+
+    @staticmethod
+    def _close_traci_label() -> None:
         try:
-            self._connection.close()
+            traci.switch(TRACI_LABEL)
+            traci.close(False)
         except Exception:
             pass
-        finally:
-            self._connection = None
-            self._latest_state = self._empty_state()
 
     def _snapshot_state(self) -> Dict[str, object]:
         vehicles = self._collect_vehicle_states()

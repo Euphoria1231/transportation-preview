@@ -29,6 +29,8 @@ def create_api_blueprint(runner: SimulationRunner) -> Blueprint:
             return jsonify({"error": str(exc)}), 400
         except OSError as exc:
             return jsonify({"error": f"Failed to write generated scenario files: {exc}"}), 500
+        except RuntimeError as exc:
+            return jsonify({"error": f"Failed to start SUMO scenario: {exc}"}), 500
 
     @api.get("/stream")
     def stream():
@@ -84,7 +86,10 @@ def create_api_blueprint(runner: SimulationRunner) -> Blueprint:
 
     @api.post("/sim/start")
     def start():
-        return jsonify(runner.start())
+        try:
+            return jsonify(runner.start())
+        except RuntimeError as exc:
+            return jsonify({"error": f"Failed to start SUMO simulation: {exc}"}), 500
 
     @api.post("/sim/pause")
     def pause():
@@ -92,10 +97,16 @@ def create_api_blueprint(runner: SimulationRunner) -> Blueprint:
 
     @api.post("/sim/reset")
     def reset():
-        return jsonify(runner.reset())
+        try:
+            return jsonify(runner.reset())
+        except RuntimeError as exc:
+            return jsonify({"error": f"Failed to reset SUMO simulation: {exc}"}), 500
 
     @api.post("/sim/step")
     def step():
-        return jsonify(runner.step_once())
+        try:
+            return jsonify(runner.step_once())
+        except RuntimeError as exc:
+            return jsonify({"error": f"Failed to step SUMO simulation: {exc}"}), 500
 
     return api
