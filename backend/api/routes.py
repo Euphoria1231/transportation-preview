@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Blueprint, Response, jsonify, stream_with_context
+from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from backend.sim.runner import SimulationRunner
 
@@ -11,6 +11,24 @@ def create_api_blueprint(runner: SimulationRunner) -> Blueprint:
     @api.get("/config")
     def get_config():
         return jsonify(runner.get_config())
+
+    @api.get("/scenario/default")
+    def get_default_scenario():
+        return jsonify(runner.get_default_scenario_config())
+
+    @api.get("/scenario/current")
+    def get_current_scenario():
+        return jsonify(runner.get_current_scenario())
+
+    @api.post("/scenario/apply")
+    def apply_scenario():
+        raw_config = request.get_json(silent=True) or {}
+        try:
+            return jsonify(runner.apply_scenario(raw_config))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except OSError as exc:
+            return jsonify({"error": f"Failed to write generated scenario files: {exc}"}), 500
 
     @api.get("/stream")
     def stream():

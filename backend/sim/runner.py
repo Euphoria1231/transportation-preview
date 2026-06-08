@@ -11,6 +11,12 @@ import traci
 
 from .logic import apply_lane_change_logic, color_for_type
 from .network import parse_network
+from .scenario_config import (
+    derive_flow_plan,
+    get_default_scenario_config,
+    validate_scenario_config,
+)
+from .scenario_writer import write_scenario_files
 
 
 class SimulationRunner:
@@ -22,6 +28,11 @@ class SimulationRunner:
         self.net_file_path = scenario_dir / "test.net.xml"
         self.step_length = self._read_step_length(self.sumocfg_path)
         self.network_config = parse_network(self.net_file_path)
+        self.current_scenario_config = get_default_scenario_config()
+        self.current_flow_plan = derive_flow_plan(self.current_scenario_config)
+        self.enable_cav_lane_change_control = bool(
+            self.current_scenario_config["enableCavLaneChangeControl"]
+        )
 
         self._lock = threading.RLock()
         self._condition = threading.Condition(self._lock)
@@ -42,6 +53,16 @@ class SimulationRunner:
             **self.network_config,
             "stepLength": self.step_length,
         }
+
+    def get_default_scenario_config(self) -> Dict[str, object]:
+        return get_default_scenario_config()
+
+    def get_current_scenario(self) -> Dict[str, object]:
+        with self._lock:
+            return {
+                "config": dict(self.current_scenario_config),
+                "flowPlan": dict(self.current_flow_plan),
+            }
 
     def get_state(self) -> Dict[str, object]:
         with self._lock:
@@ -77,6 +98,35 @@ class SimulationRunner:
             self._bump_state_version()
             self._condition.notify_all()
             return dict(self._latest_state)
+
+    def apply_scenario(self, raw_config: Dict[str, object]) -> Dict[str, object]:
+        next_config = validate_scenario_config(raw_config)
+        generated_files = write_scenario_files(self.scenario_dir, next_config)
+        next_flow_plan = derive_flow_plan(next_config)
+
+        with self._lock:
+            self._running = False
+            self._close_connection()
+            self.sumocfg_path = generated_files["sumocfgPath"]
+            self.step_length = float(next_config["stepLength"])
+            self.current_scenario_config = next_config
+            self.current_flow_plan = next_flow_plan
+            self.enable_cav_lane_change_control = bool(
+                next_config["enableCavLaneChangeControl"]
+            )
+            self._step = 0
+            self._last_lane_change_event = None
+            self._error = None
+            self._ensure_connection()
+            self._running = True
+            self._latest_state["running"] = True
+            self._bump_state_version()
+            self._condition.notify_all()
+            return {
+                "config": dict(self.current_scenario_config),
+                "flowPlan": dict(self.current_flow_plan),
+                "state": dict(self._latest_state),
+            }
 
     def step_once(self) -> Dict[str, object]:
         with self._lock:
@@ -141,7 +191,11 @@ class SimulationRunner:
 
         current_step = self._step
         self._connection.simulationStep()
-        events = apply_lane_change_logic(self._connection, current_step)
+        events = (
+            apply_lane_change_logic(self._connection, current_step)
+            if self.enable_cav_lane_change_control
+            else []
+        )
         if events:
             self._last_lane_change_event = events[-1]
 
@@ -158,6 +212,8 @@ class SimulationRunner:
             "-c",
             str(self.sumocfg_path),
             "--quit-on-end",
+            "--seed",
+            str(self.current_scenario_config["randomSeed"]),
         ]
         traci.start(cmd, label="browser")
         self._connection = traci.getConnection("browser")

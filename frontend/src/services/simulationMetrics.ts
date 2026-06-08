@@ -120,7 +120,7 @@ export function deriveLaneMetrics(
       densityPerKm,
       occupancy,
       queueLength,
-      congestionLevel: getCongestionLevel(averageSpeed, densityPerKm, occupancy),
+      congestionLevel: getCongestionLevel(laneVehicles.length, averageSpeed, densityPerKm, occupancy),
     }
   })
 }
@@ -187,10 +187,15 @@ function estimateQueueLength(vehicles: VehicleState[]) {
 }
 
 function getCongestionLevel(
+  vehicleCount: number,
   averageSpeed: number,
   densityPerKm: number,
   occupancy: number,
 ): LaneMetrics['congestionLevel'] {
+  if (vehicleCount === 0) {
+    return 'free'
+  }
+
   const speedKmh = averageSpeed * 3.6
   if (occupancy > 0.82 || densityPerKm > 70) {
     return 'risk'

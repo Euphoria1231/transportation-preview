@@ -21,6 +21,49 @@ export interface NetworkConfig {
   stepLength: number
 }
 
+export type ScenarioPreset =
+  | 'balanced'
+  | 'high-flow'
+  | 'high-cav'
+  | 'low-cav'
+  | 'ramp-heavy'
+  | 'exit-heavy'
+
+export interface ScenarioConfig {
+  simulationDuration: number
+  stepLength: number
+  totalFlow: number
+  cavPenetrationRate: number
+  mainlineRatio: number
+  rampRatio: number
+  exitRatio: number
+  speedLimitKmh: number
+  randomSeed: number
+  enableCavLaneChangeControl: boolean
+  scenarioPreset: ScenarioPreset
+}
+
+export interface ScenarioFlowPlan {
+  totalFlow: number
+  cavFlow: number
+  hdvFlow: number
+  mainlineFlow: number
+  rampFlow: number
+  exitFlow: number
+  straightFlow: number
+  straightFlowA: number
+  straightFlowB: number
+  straightFlowAConnected: number
+  straightFlowAHuman: number
+  straightFlowBConnected: number
+  straightFlowBHuman: number
+  exitFlowConnected: number
+  exitFlowHuman: number
+  rampFlowConnected: number
+  rampFlowHuman: number
+  speedLimitMetersPerSecond: number
+}
+
 export interface LaneChangeEvent {
   step: number
   vehicleId: string
@@ -63,6 +106,15 @@ export interface SimulationState {
   lastLaneChangeEvent: LaneChangeEvent | null
   vehicles: VehicleState[]
   error: string | null
+}
+
+export interface ScenarioCurrentResponse {
+  config: ScenarioConfig
+  flowPlan: ScenarioFlowPlan
+}
+
+export interface ScenarioApplyResponse extends ScenarioCurrentResponse {
+  state: SimulationState
 }
 
 export type ConnectionStatus = 'connecting' | 'open' | 'error'
