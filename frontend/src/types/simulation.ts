@@ -135,3 +135,144 @@ export interface LaneMetrics {
   queueLength: number
   congestionLevel: 'free' | 'moderate' | 'heavy' | 'risk'
 }
+
+export type RiskEventType = 'low_ttc' | 'hard_brake' | 'queue_spillback' | 'stopped_vehicle'
+export type RiskSeverity = 'low' | 'medium' | 'high'
+export type LaneRiskLevel = 'free' | 'moderate' | 'congested' | 'risk'
+export type HeatmapMode =
+  | 'speed'
+  | 'density'
+  | 'congestion'
+  | 'risk'
+  | 'emission'
+  | 'laneChangeFrequency'
+
+export interface HeatmapValues {
+  speed: number
+  density: number
+  congestion: number
+  risk: number
+  emission: number
+  laneChangeFrequency: number
+}
+
+export interface LaneMetric {
+  laneId: string
+  edgeId: string
+  laneIndex: number
+  vehicleCount: number
+  averageSpeed: number
+  averageSpeedKmh: number
+  densityPerKm: number
+  occupancy: number
+  queueLength: number
+  laneChangeCount: number
+  minTtc: number | null
+  riskLevel: LaneRiskLevel
+  heatmapValues: HeatmapValues
+  sampleStep?: number
+  sampleTime?: number
+}
+
+export interface RiskEvent {
+  time: number
+  step: number
+  type: RiskEventType
+  vehicleId?: string
+  laneId?: string
+  value?: number
+  severity: RiskSeverity
+}
+
+export interface MetricSample {
+  simTime: number
+  step: number
+  averageSpeed: number
+  averageSpeedKmh: number
+  vehicleCount: number
+  connectedCount: number
+  cavPenetrationRate: number
+  densityPerKm: number
+  averageDelay: number
+  queueLength: number
+  laneChangeCount: number
+  minTtc: number | null
+  hardBrakeCount: number
+  highRiskEventCount: number
+  laneMetrics: LaneMetric[]
+  riskEvents: RiskEvent[]
+  emission?: {
+    isProxy: boolean
+    description: string
+    networkProxy: number
+  }
+  metricNotes?: Record<string, string>
+}
+
+export interface RankedLaneSummary {
+  laneId: string
+  edgeId: string
+  laneIndex: number
+  congestionScore?: number
+  riskScore?: number
+  queueLength: number
+}
+
+export interface AnalysisSummary {
+  simulationDuration: number
+  totalVehiclesSeen: number
+  averageSpeedKmh: number
+  averageDelay: number
+  totalLaneChanges: number
+  totalHardBrakes: number
+  totalHighRiskEvents: number
+  minTtc: number | null
+  cavPenetrationRate: number
+  worstLanesByCongestion: RankedLaneSummary[]
+  worstLanesByRisk: RankedLaneSummary[]
+  scenarioConfig: ScenarioConfig | null
+}
+
+export interface SimulationReport {
+  generatedAt: string
+  scenarioName: string
+  scenarioConfig: ScenarioConfig | null
+  simulationDuration: number
+  totalVehiclesSeen: number
+  averageSpeedKmh: number
+  averageDelay: number
+  totalLaneChanges: number
+  totalHardBrakes: number
+  totalHighRiskEvents: number
+  minTtc: number | null
+  cavPenetrationRate: number
+  congestionSummary: string
+  riskSummary: string
+  conclusion: string
+  metricNotes?: Record<string, string>
+}
+
+export interface ComparisonDeltas {
+  averageSpeedChangePercent: number | null
+  averageSpeedAbsoluteChange: number
+  averageDelayChangePercent: number | null
+  averageDelayAbsoluteChange: number
+  hardBrakeChangePercent: number | null
+  hardBrakeAbsoluteChange: number
+  highRiskEventChangePercent: number | null
+  highRiskEventAbsoluteChange: number
+  laneChangeChangePercent: number | null
+  laneChangeAbsoluteChange: number
+}
+
+export interface ComparisonReport {
+  generatedAt: string
+  baselineSummary: AnalysisSummary
+  experimentSummary: AnalysisSummary
+  deltas: ComparisonDeltas
+  conclusion: string
+}
+
+export interface BaselineResponse {
+  baseline: AnalysisSummary | null
+}

@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from collections import deque
 from pathlib import Path
 import json
 import threading
 import time
-from typing import Any, Callable, Dict, Generator, List, Optional
+from typing import Any, Callable, Deque, Dict, Generator, List, Optional
 import xml.etree.ElementTree as ET
 
 import traci
 
 from .logic import apply_lane_change_logic, color_for_type
+from .metrics import create_metric_sample, summarize_metric_history
 from .network import parse_network
+from .reporting import build_comparison_report, build_simulation_report
 from .scenario_config import (
     derive_flow_plan,
     get_default_scenario_config,
@@ -43,6 +46,10 @@ class SimulationRunner:
         self._step = 0
         self._error: Optional[str] = None
         self._last_lane_change_event: Optional[Dict[str, object]] = None
+        self._metric_history: Deque[Dict[str, object]] = deque(maxlen=1000)
+        self._latest_metrics: Optional[Dict[str, object]] = None
+        self._baseline_summary: Optional[Dict[str, object]] = None
+        self._vehicle_ids_seen: set[str] = set()
         self._latest_state = self._empty_state()
 
         self._thread = threading.Thread(target=self._loop, name="sumo-runner", daemon=True)
@@ -68,6 +75,50 @@ class SimulationRunner:
         with self._lock:
             return dict(self._latest_state)
 
+    def get_latest_metrics(self) -> Dict[str, object]:
+        with self._lock:
+            return dict(self._latest_metrics) if self._latest_metrics else self._empty_metrics()
+
+    def get_metric_history(self, window: int = 100) -> List[Dict[str, object]]:
+        safe_window = max(1, min(int(window), 1000))
+        with self._lock:
+            return [dict(sample) for sample in list(self._metric_history)[-safe_window:]]
+
+    def get_latest_lane_metrics(self) -> List[Dict[str, object]]:
+        with self._lock:
+            if not self._latest_metrics:
+                return []
+            return [dict(lane) for lane in self._latest_metrics.get("laneMetrics", [])]
+
+    def get_analysis_summary(self) -> Dict[str, object]:
+        with self._lock:
+            return summarize_metric_history(
+                self._metric_history,
+                scenario_config=dict(self.current_scenario_config),
+                total_vehicles_seen=len(self._vehicle_ids_seen),
+            )
+
+    def save_baseline_summary(self) -> Dict[str, object]:
+        with self._lock:
+            self._baseline_summary = self.get_analysis_summary()
+            return dict(self._baseline_summary)
+
+    def get_baseline_summary(self) -> Dict[str, object]:
+        with self._lock:
+            if self._baseline_summary is None:
+                return {"baseline": None}
+            return {"baseline": dict(self._baseline_summary)}
+
+    def generate_current_report(self) -> Dict[str, object]:
+        with self._lock:
+            return build_simulation_report(self.get_analysis_summary())
+
+    def generate_comparison_report(self) -> Dict[str, object]:
+        with self._lock:
+            if self._baseline_summary is None:
+                raise ValueError("Baseline summary is not available.")
+            return build_comparison_report(self._baseline_summary, self.get_analysis_summary())
+
     def start(self) -> Dict[str, object]:
         with self._lock:
             self._ensure_connection()
@@ -92,6 +143,7 @@ class SimulationRunner:
             self._close_connection()
             self._step = 0
             self._last_lane_change_event = None
+            self._clear_metrics()
             self._error = None
             self._ensure_connection()
             self._latest_state = self._snapshot_state()
@@ -116,6 +168,7 @@ class SimulationRunner:
             )
             self._step = 0
             self._last_lane_change_event = None
+            self._clear_metrics()
             self._error = None
             self._ensure_connection()
             self._running = True
@@ -200,6 +253,7 @@ class SimulationRunner:
             self._last_lane_change_event = events[-1]
 
         self._latest_state = self._snapshot_state()
+        self._append_metric_sample(events)
         self._step += 1
         self._bump_state_version()
 
@@ -218,6 +272,22 @@ class SimulationRunner:
         traci.start(cmd, label="browser")
         self._connection = traci.getConnection("browser")
         self._latest_state = self._snapshot_state()
+
+    def _append_metric_sample(self, lane_change_events: List[Dict[str, object]]) -> None:
+        vehicles = list(self._latest_state.get("vehicles", []))
+        for vehicle in vehicles:
+            vehicle_id = vehicle.get("id")
+            if vehicle_id is not None:
+                self._vehicle_ids_seen.add(str(vehicle_id))
+        sample = create_metric_sample(
+            sim_time=float(self._latest_state.get("simTime", 0.0)),
+            step=int(self._latest_state.get("step", self._step)),
+            vehicles=vehicles,
+            network_config=self.network_config,
+            lane_change_events=lane_change_events,
+        )
+        self._latest_metrics = sample
+        self._metric_history.append(sample)
 
     def _close_connection(self) -> None:
         if self._connection is None:
@@ -328,6 +398,36 @@ class SimulationRunner:
             "vehicles": [],
             "error": self._error,
         }
+
+    def _empty_metrics(self) -> Dict[str, object]:
+        return {
+            "simTime": 0.0,
+            "step": self._step,
+            "averageSpeed": 0.0,
+            "averageSpeedKmh": 0.0,
+            "vehicleCount": 0,
+            "connectedCount": 0,
+            "cavPenetrationRate": 0.0,
+            "densityPerKm": 0.0,
+            "averageDelay": 0.0,
+            "queueLength": 0.0,
+            "laneChangeCount": 0,
+            "minTtc": None,
+            "hardBrakeCount": 0,
+            "highRiskEventCount": 0,
+            "laneMetrics": [],
+            "riskEvents": [],
+            "emission": {
+                "isProxy": True,
+                "description": "Speed and acceleration based proxy, not measured CO2/NOx/fuel.",
+                "networkProxy": 0.0,
+            },
+        }
+
+    def _clear_metrics(self) -> None:
+        self._metric_history.clear()
+        self._latest_metrics = None
+        self._vehicle_ids_seen.clear()
 
     def _bump_state_version(self) -> None:
         self._state_version += 1

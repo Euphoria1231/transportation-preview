@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
-import type { Lane, NetworkConfig, VehicleState } from '../types/simulation'
+import type { HeatmapMode, Lane, LaneMetric, NetworkConfig, VehicleState } from '../types/simulation'
 
 interface CanvasSceneProps {
   config: NetworkConfig | null
   vehicles: VehicleState[]
+  laneMetrics?: LaneMetric[]
+  heatmapMode?: HeatmapMode | null
   snapshotTick: number
   selectedVehicleId: string | null
   selectedLaneId: string | null
@@ -24,6 +26,8 @@ interface CanvasSize {
 export function CanvasScene({
   config,
   vehicles,
+  laneMetrics = [],
+  heatmapMode = null,
   snapshotTick,
   selectedVehicleId,
   selectedLaneId,
@@ -94,6 +98,7 @@ export function CanvasScene({
       context.clearRect(0, 0, size.width, size.height)
 
       drawLanes(context, config, viewport)
+      drawLaneHeatmap(context, config, laneMetrics, heatmapMode, viewport)
       if (selectedLaneId) {
         drawSelectedLane(context, config, selectedLaneId, viewport)
       }
@@ -115,6 +120,8 @@ export function CanvasScene({
     return () => window.cancelAnimationFrame(frameId)
   }, [
     config,
+    heatmapMode,
+    laneMetrics,
     routePath,
     selectedLaneId,
     selectedVehicleId,
@@ -195,6 +202,39 @@ export function CanvasScene({
       </div>
     </div>
   )
+}
+
+function drawLaneHeatmap(
+  context: CanvasRenderingContext2D,
+  config: NetworkConfig,
+  laneMetrics: LaneMetric[],
+  heatmapMode: HeatmapMode | null,
+  viewport: { scale: number; offsetX: number; offsetY: number },
+) {
+  if (!heatmapMode || laneMetrics.length === 0) {
+    return
+  }
+
+  const metricsByLane = new Map(laneMetrics.map((lane) => [lane.laneId, lane]))
+  context.save()
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.shadowBlur = 0
+
+  for (const lane of config.lanes) {
+    const metrics = metricsByLane.get(lane.id)
+    if (!metrics) {
+      continue
+    }
+
+    const heatValue = metrics.heatmapValues[heatmapMode]
+    traceLanePath(context, lane.shape, viewport)
+    context.strokeStyle = heatmapColor(heatValue, metrics.riskLevel)
+    context.lineWidth = (lane.edgeId.startsWith('E') ? 13 : 11) + 5
+    context.stroke()
+  }
+
+  context.restore()
 }
 
 function drawLanes(
@@ -583,6 +623,19 @@ function normalizeVehicleColor(color: string) {
   }
 
   return '#38bdf8'
+}
+
+function heatmapColor(value: number, riskLevel: LaneMetric['riskLevel']) {
+  if (riskLevel === 'risk' || value >= 0.82) {
+    return 'rgba(147, 51, 234, 0.6)'
+  }
+  if (value >= 0.58) {
+    return 'rgba(239, 68, 68, 0.55)'
+  }
+  if (value >= 0.3) {
+    return 'rgba(250, 204, 21, 0.5)'
+  }
+  return 'rgba(34, 197, 94, 0.45)'
 }
 
 function mixColor(baseColor: string, mixTarget: string, amount: number) {

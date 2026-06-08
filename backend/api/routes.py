@@ -42,6 +42,46 @@ def create_api_blueprint(runner: SimulationRunner) -> Blueprint:
             },
         )
 
+    @api.get("/metrics/latest")
+    def latest_metrics():
+        return jsonify(runner.get_latest_metrics())
+
+    @api.get("/metrics/history")
+    def metric_history():
+        raw_window = request.args.get("window", "100")
+        try:
+            window = int(raw_window)
+        except ValueError:
+            window = 100
+        return jsonify(runner.get_metric_history(window))
+
+    @api.get("/metrics/lane/latest")
+    def latest_lane_metrics():
+        return jsonify(runner.get_latest_lane_metrics())
+
+    @api.get("/analysis/summary")
+    def analysis_summary():
+        return jsonify(runner.get_analysis_summary())
+
+    @api.post("/report/baseline")
+    def save_baseline():
+        return jsonify(runner.save_baseline_summary())
+
+    @api.get("/report/baseline")
+    def get_baseline():
+        return jsonify(runner.get_baseline_summary())
+
+    @api.post("/report/current")
+    def current_report():
+        return jsonify(runner.generate_current_report())
+
+    @api.post("/report/compare")
+    def comparison_report():
+        try:
+            return jsonify(runner.generate_comparison_report())
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
     @api.post("/sim/start")
     def start():
         return jsonify(runner.start())

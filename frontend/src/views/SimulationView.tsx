@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react'
 
+import { AnalysisPanel } from '../components/AnalysisPanel'
 import { CanvasScene } from '../components/CanvasScene'
 import { ControlPanel } from '../components/ControlPanel'
 import { EventFeed } from '../components/EventFeed'
 import { InspectorPanel } from '../components/InspectorPanel'
+import { ReportPanel } from '../components/ReportPanel'
 import { StatusPanel } from '../components/StatusPanelLight'
 import { useSimulationStream } from '../hooks/useSimulationStream'
-import { fetchConfig, fetchCurrentScenarioConfig, sendSimulationCommand } from '../services/api'
+import {
+  fetchConfig,
+  fetchCurrentScenarioConfig,
+  fetchLatestLaneMetrics,
+  sendSimulationCommand,
+} from '../services/api'
 import {
   appendSnapshot,
   deriveLaneMetrics,
@@ -17,6 +24,8 @@ import {
 } from '../services/simulationMetrics'
 import type {
   NetworkConfig,
+  HeatmapMode,
+  LaneMetric,
   ScenarioConfig,
   ScenarioFlowPlan,
   SimulationSnapshot,
@@ -50,6 +59,10 @@ export function SimulationView({
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null)
   const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null)
   const [trailSeconds, setTrailSeconds] = useState(20)
+  const [activePanel, setActivePanel] = useState<SidePanelTab>('control')
+  const [heatmapMode, setHeatmapMode] = useState<HeatmapMode | null>(null)
+  const [serverLaneMetrics, setServerLaneMetrics] = useState<LaneMetric[]>([])
+  const [analysisRefreshKey, setAnalysisRefreshKey] = useState(0)
   const { simulation, connectionStatus, snapshotTick } = useSimulationStream()
 
   useEffect(() => {
@@ -145,6 +158,30 @@ export function SimulationView({
     }
   }, [config?.lanes, selectedLaneId])
 
+  useEffect(() => {
+    let mounted = true
+
+    const loadLaneMetrics = async () => {
+      try {
+        const metrics = await fetchLatestLaneMetrics()
+        if (mounted) {
+          setServerLaneMetrics(metrics)
+        }
+      } catch {
+        if (mounted) {
+          setServerLaneMetrics([])
+        }
+      }
+    }
+
+    void loadLaneMetrics()
+    const timer = window.setInterval(() => void loadLaneMetrics(), 1000)
+    return () => {
+      mounted = false
+      window.clearInterval(timer)
+    }
+  }, [])
+
   const clearLocalSimulationState = () => {
     setViewportResetTick((tick) => tick + 1)
     setHistory([])
@@ -152,12 +189,15 @@ export function SimulationView({
     setReplayPercent(1)
     setSelectedVehicleId(null)
     setSelectedLaneId(null)
+    setServerLaneMetrics([])
+    setAnalysisRefreshKey((key) => key + 1)
   }
 
   const runCommand = async (action: 'start' | 'pause' | 'reset' | 'step') => {
     setBusy(true)
     try {
       await sendSimulationCommand(action)
+      setAnalysisRefreshKey((key) => key + 1)
       if (action === 'reset') {
         clearLocalSimulationState()
       }
@@ -242,6 +282,8 @@ export function SimulationView({
         ) : (
           <CanvasScene
             config={config}
+            heatmapMode={heatmapMode}
+            laneMetrics={serverLaneMetrics}
             key={viewportResetTick}
             snapshotTick={snapshotTick}
             onLaneSelect={handleLaneSelect}
@@ -255,40 +297,102 @@ export function SimulationView({
         )}
       </section>
 
-      <aside className="panel-scroll flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
-        <ScenarioSummaryPanel
-          busy={busy}
-          config={visibleScenarioConfig}
-          flowPlan={visibleScenarioFlowPlan}
-          onBackToSetup={onBackToSetup ? handleBackToSetup : undefined}
-        />
-        <ControlPanel
-          busy={busy}
-          historyCount={history.length}
-          onPause={() => runCommand('pause')}
-          onReplayModeChange={setReplayMode}
-          onReplayPercentChange={setReplayPercent}
-          onReset={() => runCommand('reset')}
-          onResetViewport={() => setViewportResetTick((tick) => tick + 1)}
-          onStart={() => runCommand('start')}
-          onStep={() => runCommand('step')}
-          replayMode={replayMode}
-          replayPercent={replayPercent}
-          replayTimeLabel={replayTimeLabel}
-          running={visibleSimulation?.running ?? false}
-        />
-        <InspectorPanel
-          onExportVehicle={handleExportVehicle}
-          onTrailSecondsChange={setTrailSeconds}
-          selectedLane={selectedLane}
-          selectedVehicle={selectedVehicle}
-          trailPointCount={vehicleTrail.length}
-          trailSeconds={trailSeconds}
-        />
-        <StatusPanel config={config} connectionStatus={connectionStatus} simulation={visibleSimulation} />
-        <EventFeed event={visibleSimulation?.lastLaneChangeEvent ?? null} />
+      <aside className="flex min-h-0 flex-col gap-3 overflow-hidden">
+        <PanelTabs activePanel={activePanel} onPanelChange={setActivePanel} />
+        <div className="panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+          {activePanel === 'control' ? (
+            <div className="space-y-4">
+              <ScenarioSummaryPanel
+                busy={busy}
+                config={visibleScenarioConfig}
+                flowPlan={visibleScenarioFlowPlan}
+                onBackToSetup={onBackToSetup ? handleBackToSetup : undefined}
+              />
+              <ControlPanel
+                busy={busy}
+                historyCount={history.length}
+                onPause={() => runCommand('pause')}
+                onReplayModeChange={setReplayMode}
+                onReplayPercentChange={setReplayPercent}
+                onReset={() => runCommand('reset')}
+                onResetViewport={() => setViewportResetTick((tick) => tick + 1)}
+                onStart={() => runCommand('start')}
+                onStep={() => runCommand('step')}
+                replayMode={replayMode}
+                replayPercent={replayPercent}
+                replayTimeLabel={replayTimeLabel}
+                running={visibleSimulation?.running ?? false}
+              />
+            </div>
+          ) : null}
+
+          {activePanel === 'inspector' ? (
+            <InspectorPanel
+              onExportVehicle={handleExportVehicle}
+              onTrailSecondsChange={setTrailSeconds}
+              selectedLane={selectedLane}
+              selectedVehicle={selectedVehicle}
+              trailPointCount={vehicleTrail.length}
+              trailSeconds={trailSeconds}
+            />
+          ) : null}
+
+          {activePanel === 'metrics' ? (
+            <div className="space-y-4">
+              <StatusPanel config={config} connectionStatus={connectionStatus} simulation={visibleSimulation} />
+              <EventFeed event={visibleSimulation?.lastLaneChangeEvent ?? null} />
+            </div>
+          ) : null}
+
+          {activePanel === 'analysis' ? (
+            <AnalysisPanel
+              heatmapMode={heatmapMode}
+              onHeatmapModeChange={setHeatmapMode}
+              refreshKey={analysisRefreshKey}
+            />
+          ) : null}
+
+          {activePanel === 'report' ? <ReportPanel refreshKey={analysisRefreshKey} /> : null}
+        </div>
       </aside>
     </main>
+  )
+}
+
+type SidePanelTab = 'control' | 'inspector' | 'metrics' | 'analysis' | 'report'
+
+const SIDE_PANEL_TABS: Array<{ key: SidePanelTab; label: string }> = [
+  { key: 'control', label: '控制' },
+  { key: 'inspector', label: '对象详情' },
+  { key: 'metrics', label: '实时指标' },
+  { key: 'analysis', label: '分析' },
+  { key: 'report', label: '报告' },
+]
+
+function PanelTabs({
+  activePanel,
+  onPanelChange,
+}: {
+  activePanel: SidePanelTab
+  onPanelChange: (panel: SidePanelTab) => void
+}) {
+  return (
+    <div className="grid grid-cols-5 gap-1 rounded-2xl border border-slate-200 bg-white/90 p-1 shadow-xl shadow-slate-200/70 backdrop-blur">
+      {SIDE_PANEL_TABS.map((tab) => (
+        <button
+          className={`min-h-10 rounded-xl px-2 text-xs font-semibold transition ${
+            activePanel === tab.key
+              ? 'bg-slate-900 text-white shadow-md shadow-slate-300'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+          key={tab.key}
+          onClick={() => onPanelChange(tab.key)}
+          type="button"
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
