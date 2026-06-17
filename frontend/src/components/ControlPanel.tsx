@@ -105,7 +105,7 @@ export function ControlPanel({
 
         <label className="block">
           <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-            <span>{replayMode ? replayTimeLabel : '最近 60 秒缓存'}</span>
+            <span>{replayMode ? replayTimeLabel : '近 60 秒'}</span>
             <span>{historyCount} 帧</span>
           </div>
           <input

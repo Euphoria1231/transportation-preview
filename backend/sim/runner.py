@@ -15,6 +15,7 @@ TRACI_LABEL = "browser"
 from .logic import apply_lane_change_logic, color_for_type
 from .metrics import create_metric_sample, summarize_metric_history
 from .network import parse_network
+from .presequencing import build_presequencing_state
 from .reporting import build_comparison_report, build_simulation_report
 from .scenario_config import (
     derive_flow_plan,
@@ -37,6 +38,9 @@ class SimulationRunner:
         self.current_flow_plan = derive_flow_plan(self.current_scenario_config)
         self.enable_cav_lane_change_control = bool(
             self.current_scenario_config["enableCavLaneChangeControl"]
+        )
+        self.disable_sumo_lane_change_control = bool(
+            self.current_scenario_config["disableSumoLaneChangeControl"]
         )
 
         self._lock = threading.RLock()
@@ -168,6 +172,9 @@ class SimulationRunner:
             self.enable_cav_lane_change_control = bool(
                 next_config["enableCavLaneChangeControl"]
             )
+            self.disable_sumo_lane_change_control = bool(
+                next_config["disableSumoLaneChangeControl"]
+            )
             self._step = 0
             self._last_lane_change_event = None
             self._clear_metrics()
@@ -245,7 +252,9 @@ class SimulationRunner:
             raise RuntimeError("Simulation is not initialized.")
 
         current_step = self._step
+        self._apply_sumo_lane_change_permissions()
         self._connection.simulationStep()
+        self._apply_sumo_lane_change_permissions()
         events = (
             apply_lane_change_logic(self._connection, current_step)
             if self.enable_cav_lane_change_control
@@ -297,6 +306,16 @@ class SimulationRunner:
         self._latest_metrics = sample
         self._metric_history.append(sample)
 
+    def _apply_sumo_lane_change_permissions(self) -> None:
+        if not self.disable_sumo_lane_change_control or self._connection is None:
+            return
+
+        for vehicle_id in self._connection.vehicle.getIDList():
+            self._safe_value(
+                lambda vehicle_id=vehicle_id: self._connection.vehicle.setLaneChangeMode(vehicle_id, 0),
+                None,
+            )
+
     def _close_connection(self) -> None:
         connection = self._connection
         self._connection = None
@@ -331,6 +350,11 @@ class SimulationRunner:
             "vehicleCount": len(vehicles),
             "connectedCount": connected_count,
             "lastLaneChangeEvent": self._last_lane_change_event,
+            "presequencingZones": build_presequencing_state(
+                vehicles,
+                self.network_config,
+                self.enable_cav_lane_change_control,
+            ),
             "vehicles": vehicles,
             "error": self._error,
         }
@@ -412,6 +436,7 @@ class SimulationRunner:
             "vehicleCount": 0,
             "connectedCount": 0,
             "lastLaneChangeEvent": None,
+            "presequencingZones": [],
             "vehicles": [],
             "error": self._error,
         }

@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
-
 import {
   applyScenarioConfig,
-  fetchConfig,
   fetchDefaultScenarioConfig,
 } from '../services/api'
 import type {
-  NetworkConfig,
   ScenarioApplyResponse,
   ScenarioConfig,
   ScenarioFlowPlan,
@@ -100,7 +96,6 @@ export function ScenarioSetupView({
   onScenarioApplied,
 }: ScenarioSetupViewProps) {
   const [config, setConfig] = useState<ScenarioConfig | null>(initialConfig ?? null)
-  const [networkConfig, setNetworkConfig] = useState<NetworkConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -110,19 +105,12 @@ export function ScenarioSetupView({
 
     const load = async () => {
       try {
-        const configPromise = initialConfig
-          ? Promise.resolve(initialConfig)
-          : fetchDefaultScenarioConfig()
-        const [nextConfig, nextNetworkConfig] = await Promise.all([
-          configPromise,
-          fetchConfig(),
-        ])
+        const nextConfig = initialConfig ?? await fetchDefaultScenarioConfig()
 
         if (!mounted) {
           return
         }
         setConfig(withDerivedRampRatio(nextConfig))
-        setNetworkConfig(nextNetworkConfig)
       } catch (loadError) {
         if (!mounted) {
           return
@@ -161,6 +149,13 @@ export function ScenarioSetupView({
     })
   }
 
+  const applyControlMode = (mode: 'algorithm' | 'no-control') => {
+    updateConfig({
+      enableCavLaneChangeControl: mode === 'algorithm',
+      disableSumoLaneChangeControl: false,
+    })
+  }
+
   const handleApply = async () => {
     if (!config) {
       return
@@ -196,9 +191,6 @@ export function ScenarioSetupView({
             <div>
               <p className="text-sm font-medium text-emerald-700">Scenario Setup</p>
               <h1 className="mt-1 text-2xl font-semibold text-slate-950">场景参数设置</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                设置流量、CAV 渗透率、限速和分流比例后启动新的 SUMO 场景。
-              </p>
             </div>
             <button
               className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
@@ -221,7 +213,7 @@ export function ScenarioSetupView({
               <section>
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-base font-semibold text-slate-900">场景预设</h2>
-                  <span className="text-sm text-slate-500">可继续微调参数</span>
+                  <span className="text-sm text-slate-500">预设可调</span>
                 </div>
                 <div className="grid grid-cols-3 gap-3 max-xl:grid-cols-2 max-sm:grid-cols-1">
                   {PRESETS.map((preset) => {
@@ -247,38 +239,24 @@ export function ScenarioSetupView({
                 </div>
               </section>
 
-              <section className="grid grid-cols-2 gap-4 max-xl:grid-cols-1">
-                <PanelBlock title="仿真时间">
-                  <div className="grid grid-cols-4 gap-2 max-sm:grid-cols-2">
-                    {DURATION_OPTIONS.map((duration) => (
-                      <button
-                        className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                          config.simulationDuration === duration
-                            ? 'border-sky-300 bg-sky-50 text-sky-700'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                        }`}
-                        key={duration}
-                        onClick={() => updateConfig({ simulationDuration: duration })}
-                        type="button"
-                      >
-                        {formatDuration(duration)}
-                      </button>
-                    ))}
-                  </div>
-                </PanelBlock>
-
-                <PanelBlock title="固定路网">
-                  <div className="grid grid-cols-2 gap-3">
-                    <ReadOnlyField label="Net 文件" value="test.net.xml" />
-                    <ReadOnlyField
-                      label="车道数"
-                      value={networkConfig ? `${networkConfig.lanes.length} 条` : '--'}
-                    />
-                  </div>
-                  <p className="mt-3 text-xs leading-5 text-slate-500">
-                    当前阶段固定使用现有路网，车道数不在参数页动态修改。
-                  </p>
-                </PanelBlock>
+              <section className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                <h2 className="mb-3 text-sm font-semibold text-slate-900">仿真时间</h2>
+                <div className="grid grid-cols-4 gap-2 max-sm:grid-cols-2">
+                  {DURATION_OPTIONS.map((duration) => (
+                    <button
+                      className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        config.simulationDuration === duration
+                          ? 'border-sky-300 bg-sky-50 text-sky-700'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}
+                      key={duration}
+                      onClick={() => updateConfig({ simulationDuration: duration })}
+                      type="button"
+                    >
+                      {formatDuration(duration)}
+                    </button>
+                  ))}
+                </div>
               </section>
 
               <section className="grid grid-cols-2 gap-4 max-xl:grid-cols-1">
@@ -325,51 +303,7 @@ export function ScenarioSetupView({
                 />
               </section>
 
-              <section className="grid grid-cols-3 gap-4 max-xl:grid-cols-1">
-                <NumberField
-                  label="限速"
-                  max={140}
-                  min={30}
-                  onChange={(value) => updateConfig({ speedLimitKmh: value })}
-                  suffix="km/h"
-                  value={config.speedLimitKmh}
-                />
-                <NumberField
-                  label="随机种子"
-                  max={999999}
-                  min={0}
-                  onChange={(value) => updateConfig({ randomSeed: Math.round(value) })}
-                  value={config.randomSeed}
-                />
-                <NumberField
-                  label="Step Length"
-                  max={1}
-                  min={0.05}
-                  onChange={(value) => updateConfig({ stepLength: value })}
-                  step={0.05}
-                  suffix="s"
-                  value={config.stepLength}
-                />
-              </section>
-
-              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-                <span>
-                  <span className="block text-sm font-semibold text-slate-900">
-                    启用 CAV 换道控制
-                  </span>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    关闭后后端 step 不调用现有 lane-change logic。
-                  </span>
-                </span>
-                <input
-                  checked={config.enableCavLaneChangeControl}
-                  className="h-5 w-5 accent-emerald-500"
-                  onChange={(event) =>
-                    updateConfig({ enableCavLaneChangeControl: event.target.checked })
-                  }
-                  type="checkbox"
-                />
-              </label>
+              <ControlModePanel config={config} onModeChange={applyControlMode} />
             </div>
           ) : null}
         </section>
@@ -396,7 +330,7 @@ export function ScenarioSetupView({
               />
 
               <section className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <h3 className="mb-3 text-sm font-semibold text-slate-900">速度与控制</h3>
+                <h3 className="mb-3 text-sm font-semibold text-slate-900">速度与方案</h3>
                 <div className="space-y-3 text-sm">
                   <SummaryRow label="限速 km/h" value={`${config.speedLimitKmh.toFixed(0)} km/h`} />
                   <SummaryRow
@@ -408,14 +342,14 @@ export function ScenarioSetupView({
                     value={`${formatRatio(config.mainlineRatio)} / ${formatRatio(config.rampRatio)}`}
                   />
                   <SummaryRow
-                    label="CAV 换道控制"
+                    label="协同调控"
                     value={config.enableCavLaneChangeControl ? '启用' : '关闭'}
                   />
                 </div>
               </section>
 
               <section className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <h3 className="mb-3 text-sm font-semibold text-slate-900">Route Flow 写入</h3>
+                <h3 className="mb-3 text-sm font-semibold text-slate-900">流量分配</h3>
                 <div className="space-y-2 text-xs text-slate-600">
                   <SummaryRow
                     label="Straight A"
@@ -442,7 +376,7 @@ export function ScenarioSetupView({
                 onClick={() => void handleApply()}
                 type="button"
               >
-                {applying ? '正在应用场景...' : '应用参数并进入仿真'}
+                {applying ? '启动中...' : '启动仿真'}
               </button>
             </div>
           ) : (
@@ -454,21 +388,69 @@ export function ScenarioSetupView({
   )
 }
 
-function PanelBlock({ title, children }: { title: string; children: ReactNode }) {
+function ControlModePanel({
+  config,
+  onModeChange,
+}: {
+  config: ScenarioConfig
+  onModeChange: (mode: 'algorithm' | 'no-control') => void
+}) {
+  const activeMode = config.enableCavLaneChangeControl && !config.disableSumoLaneChangeControl
+    ? 'algorithm'
+    : 'no-control'
+
   return (
     <section className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-      <h2 className="mb-3 text-sm font-semibold text-slate-900">{title}</h2>
-      {children}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-slate-900">控制模式</h2>
+        <span className="text-xs font-medium text-slate-500">
+          {activeMode === 'algorithm' ? '实验组' : '对照组'}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+        <ControlModeButton
+          active={activeMode === 'algorithm'}
+          description="实验组"
+          label="协同调控"
+          onClick={() => onModeChange('algorithm')}
+        />
+        <ControlModeButton
+          active={activeMode === 'no-control'}
+          description="对照组"
+          label="无控对照"
+          onClick={() => onModeChange('no-control')}
+        />
+      </div>
     </section>
   )
 }
 
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
+function ControlModeButton({
+  active,
+  label,
+  description,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  description: string
+  onClick: () => void
+}) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
-    </div>
+    <button
+      className={`min-h-[78px] rounded-xl border px-4 py-3 text-left transition ${
+        active
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-950 shadow-sm'
+          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="block text-sm font-semibold">{label}</span>
+      <span className={`mt-1 block text-xs leading-5 ${active ? 'text-emerald-700' : 'text-slate-500'}`}>
+        {description}
+      </span>
+    </button>
   )
 }
 
@@ -523,42 +505,6 @@ function RangeField({
           value={numberValue}
         />
         {suffix ? <span className="w-14 text-sm text-slate-500">{suffix}</span> : null}
-      </div>
-    </label>
-  )
-}
-
-function NumberField({
-  label,
-  min,
-  max,
-  step = 1,
-  suffix,
-  value,
-  onChange,
-}: {
-  label: string
-  min: number
-  max: number
-  step?: number
-  suffix?: string
-  value: number
-  onChange: (value: number) => void
-}) {
-  return (
-    <label className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-      <span className="mb-2 block text-sm font-semibold text-slate-900">{label}</span>
-      <div className="flex items-center gap-2">
-        <input
-          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-          max={max}
-          min={min}
-          onChange={(event) => onChange(Number(event.target.value))}
-          step={step}
-          type="number"
-          value={value}
-        />
-        {suffix ? <span className="text-sm text-slate-500">{suffix}</span> : null}
       </div>
     </label>
   )

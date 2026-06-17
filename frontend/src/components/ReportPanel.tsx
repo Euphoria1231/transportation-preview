@@ -115,6 +115,8 @@ export function ReportPanel({ refreshKey }: ReportPanelProps) {
           <SummaryMetric label="高风险" value={summary ? `${summary.totalHighRiskEvents} 次` : '--'} />
         </div>
 
+        <JudgeComparisonCard baseline={baseline} summary={summary} />
+
         <div className="grid grid-cols-1 gap-2">
           <ReportButton
             disabled={!hasSamples || busyAction !== null}
@@ -123,7 +125,13 @@ export function ReportPanel({ refreshKey }: ReportPanelProps) {
           />
           <ReportButton
             disabled={!hasSamples || busyAction !== null}
-            label={busyAction === 'baseline' ? '保存中...' : '保存为基线'}
+            label={
+              busyAction === 'baseline'
+                ? '保存中...'
+                : isNoControlScenario(summary?.scenarioConfig)
+                  ? '保存对照基线'
+                  : '保存为基线'
+            }
             onClick={handleSaveBaseline}
           />
           <ReportButton
@@ -135,11 +143,11 @@ export function ReportPanel({ refreshKey }: ReportPanelProps) {
 
         {!baseline ? (
           <p className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-            尚未保存基线，因此对比报告不可用。请先运行一个场景并保存为基线。
+            暂无基线。
           </p>
         ) : (
           <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
-            已保存基线：{baseline.simulationDuration.toFixed(1)} s，CAV {(baseline.cavPenetrationRate * 100).toFixed(0)}%。
+            已保存基线：{formatScenarioMode(baseline.scenarioConfig)}，{baseline.simulationDuration.toFixed(1)} s，CAV {(baseline.cavPenetrationRate * 100).toFixed(0)}%。
           </p>
         )}
       </div>
@@ -176,11 +184,171 @@ export function ReportPanel({ refreshKey }: ReportPanelProps) {
           <SimulationReportView report={simulationReport} />
         ) : (
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            生成报告后将在这里显示结构化内容。
+            暂无报告。
           </div>
         )}
       </div>
     </section>
+  )
+}
+
+function JudgeComparisonCard({
+  baseline,
+  summary,
+}: {
+  baseline: AnalysisSummary | null
+  summary: AnalysisSummary | null
+}) {
+  const hasBaseline = baseline !== null && baseline.simulationDuration > 0
+  const hasCurrent = summary !== null && summary.simulationDuration > 0
+  const baselineIsNoControl = isNoControlScenario(baseline?.scenarioConfig)
+  const currentIsAlgorithm = isAlgorithmScenario(summary?.scenarioConfig)
+
+  return (
+    <section className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs tracking-[0.18em] text-slate-500">对照</p>
+          <h3 className="mt-1 text-base font-semibold text-slate-950">无控对照 vs 协同调控</h3>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+          baselineIsNoControl && currentIsAlgorithm
+            ? 'bg-emerald-100 text-emerald-700'
+            : 'bg-amber-100 text-amber-700'
+        }`}>
+          {baselineIsNoControl && currentIsAlgorithm ? '对照完整' : '等待完整对照'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <RunSummaryCard
+          label="对照基线"
+          mode={baseline ? formatScenarioMode(baseline.scenarioConfig) : '未保存'}
+          speed={baseline?.averageSpeedKmh ?? null}
+          delay={baseline?.averageDelay ?? null}
+          risk={baseline?.totalHighRiskEvents ?? null}
+          tone="baseline"
+        />
+        <RunSummaryCard
+          label="当前运行"
+          mode={summary ? formatScenarioMode(summary.scenarioConfig) : '无数据'}
+          speed={summary?.averageSpeedKmh ?? null}
+          delay={summary?.averageDelay ?? null}
+          risk={summary?.totalHighRiskEvents ?? null}
+          tone="current"
+        />
+      </div>
+
+      {hasBaseline && hasCurrent ? (
+        <div className="mt-3 space-y-2">
+          <ComparisonMetricRow
+            baseline={baseline.averageSpeedKmh}
+            current={summary.averageSpeedKmh}
+            label="平均速度"
+            positiveDirection="higher"
+            unit="km/h"
+          />
+          <ComparisonMetricRow
+            baseline={baseline.averageDelay}
+            current={summary.averageDelay}
+            label="平均延误"
+            positiveDirection="lower"
+            unit="s"
+          />
+          <ComparisonMetricRow
+            baseline={baseline.totalHardBrakes}
+            current={summary.totalHardBrakes}
+            label="急刹事件"
+            positiveDirection="lower"
+            unit="次"
+          />
+          <ComparisonMetricRow
+            baseline={baseline.totalHighRiskEvents}
+            current={summary.totalHighRiskEvents}
+            label="高风险事件"
+            positiveDirection="lower"
+            unit="次"
+          />
+        </div>
+      ) : (
+        <p className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs leading-5 text-slate-500">
+          先保存“无控对照”基线，再运行“协同调控”。
+        </p>
+      )}
+    </section>
+  )
+}
+
+function RunSummaryCard({
+  label,
+  mode,
+  speed,
+  delay,
+  risk,
+  tone,
+}: {
+  label: string
+  mode: string
+  speed: number | null
+  delay: number | null
+  risk: number | null
+  tone: 'baseline' | 'current'
+}) {
+  return (
+    <div className={`rounded-xl border px-3 py-3 ${
+      tone === 'baseline'
+        ? 'border-rose-200 bg-rose-50'
+        : 'border-emerald-200 bg-emerald-50'
+    }`}>
+      <p className="text-xs font-semibold text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-950">{mode}</p>
+      <div className="mt-3 space-y-1 text-xs text-slate-600">
+        <p>速度 {speed === null ? '--' : `${speed.toFixed(1)} km/h`}</p>
+        <p>延误 {delay === null ? '--' : `${delay.toFixed(2)} s`}</p>
+        <p>高风险 {risk === null ? '--' : `${risk} 次`}</p>
+      </div>
+    </div>
+  )
+}
+
+function ComparisonMetricRow({
+  label,
+  baseline,
+  current,
+  unit,
+  positiveDirection,
+}: {
+  label: string
+  baseline: number
+  current: number
+  unit: string
+  positiveDirection: 'higher' | 'lower'
+}) {
+  const absolute = current - baseline
+  const improvement = positiveDirection === 'higher' ? absolute : -absolute
+  const percent = baseline === 0 ? null : (improvement / Math.abs(baseline)) * 100
+  const width = Math.min(Math.abs(percent ?? improvement * 10), 100)
+  const improved = improvement >= 0
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+      <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+        <span className="font-semibold text-slate-700">{label}</span>
+        <span className={improved ? 'text-emerald-600' : 'text-rose-600'}>
+          {improved ? '改善' : '恶化'} {formatImpact(percent, improvement, unit)}
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+        <div
+          className={`h-full rounded-full ${improved ? 'bg-emerald-400' : 'bg-rose-400'}`}
+          style={{ width: `${Math.max(width, 4)}%` }}
+        />
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] text-slate-500">
+        <span>基线 {formatValue(baseline, unit)}</span>
+        <span>当前 {formatValue(current, unit)}</span>
+      </div>
+    </div>
   )
 }
 
@@ -205,6 +373,8 @@ function ComparisonReportView({ report }: { report: ComparisonReport }) {
   return (
     <div className="space-y-3 text-sm text-slate-700">
       <ReportLine label="生成时间" value={formatDate(report.generatedAt)} />
+      <ReportLine label="基线模式" value={formatScenarioMode(report.baselineSummary.scenarioConfig)} />
+      <ReportLine label="当前模式" value={formatScenarioMode(report.experimentSummary.scenarioConfig)} />
       <ReportLine
         label="CAV"
         value={`${(report.baselineSummary.cavPenetrationRate * 100).toFixed(0)}% → ${(report.experimentSummary.cavPenetrationRate * 100).toFixed(0)}%`}
@@ -270,6 +440,50 @@ function formatDate(value: string) {
   return new Date(value).toLocaleString()
 }
 
+function isNoControlScenario(config: AnalysisSummary['scenarioConfig'] | undefined) {
+  return Boolean(
+    config &&
+      !config.enableCavLaneChangeControl &&
+      !config.disableSumoLaneChangeControl,
+  )
+}
+
+function isAlgorithmScenario(config: AnalysisSummary['scenarioConfig'] | undefined) {
+  return Boolean(
+    config &&
+      config.enableCavLaneChangeControl &&
+      !config.disableSumoLaneChangeControl,
+  )
+}
+
+function formatScenarioMode(config: AnalysisSummary['scenarioConfig']) {
+  if (!config) {
+    return '未知模式'
+  }
+  if (isNoControlScenario(config)) {
+    return '无控对照'
+  }
+  if (isAlgorithmScenario(config)) {
+    return '协同调控'
+  }
+  if (config.enableCavLaneChangeControl) {
+    return '协同调控'
+  }
+  return '换道关闭'
+}
+
+function formatImpact(percent: number | null, absolute: number, unit: string) {
+  if (percent === null) {
+    return `${Math.abs(absolute).toFixed(2)} ${unit}`
+  }
+  return `${Math.abs(percent).toFixed(1)}%`
+}
+
+function formatValue(value: number, unit: string) {
+  const digits = Math.abs(value) >= 10 || unit === '次' ? 0 : 2
+  return `${value.toFixed(digits)} ${unit}`
+}
+
 function exportReport(report: SimulationReport | ComparisonReport, format: 'json' | 'markdown') {
   const isComparison = 'baselineSummary' in report
   const content =
@@ -314,6 +528,8 @@ function comparisonToMarkdown(report: ComparisonReport) {
     '# 基线对比报告',
     '',
     `- 生成时间: ${report.generatedAt}`,
+    `- 基线模式: ${formatScenarioMode(report.baselineSummary.scenarioConfig)}`,
+    `- 当前模式: ${formatScenarioMode(report.experimentSummary.scenarioConfig)}`,
     `- 平均速度变化: ${formatDelta(report.deltas.averageSpeedChangePercent, report.deltas.averageSpeedAbsoluteChange, 'km/h')}`,
     `- 平均延误变化: ${formatDelta(report.deltas.averageDelayChangePercent, report.deltas.averageDelayAbsoluteChange, 's')}`,
     `- 急刹事件变化: ${formatDelta(report.deltas.hardBrakeChangePercent, report.deltas.hardBrakeAbsoluteChange, '次')}`,

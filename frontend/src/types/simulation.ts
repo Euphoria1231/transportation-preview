@@ -40,6 +40,7 @@ export interface ScenarioConfig {
   speedLimitKmh: number
   randomSeed: number
   enableCavLaneChangeControl: boolean
+  disableSumoLaneChangeControl: boolean
   scenarioPreset: ScenarioPreset
 }
 
@@ -66,6 +67,7 @@ export interface ScenarioFlowPlan {
 
 export interface LaneChangeEvent {
   step: number
+  zoneId?: string
   vehicleId: string
   fromEdge: string
   fromLane: number
@@ -97,6 +99,31 @@ export interface VehicleState {
   color: string
 }
 
+export interface PresequencingZone {
+  id: string
+  edgeId: string
+  sourceLane: number
+  targetLane: number
+  destination: string
+  targetFlow: string
+  intent: 'exit' | 'through'
+  active: boolean
+  controlEnabled: boolean
+  intensity: number
+  riskScore: number
+  vehicleCount: number
+  candidateCount: number
+  cavCandidateCount: number
+  humanCandidateCount: number
+  sourceLaneLoad: number
+  targetLaneLoad: number
+  activeLengthFraction: number
+  laneIds: string[]
+  signalSource: string
+  simulated: boolean
+  reason: string
+}
+
 export interface SimulationState {
   simTime: number
   step: number
@@ -104,6 +131,7 @@ export interface SimulationState {
   vehicleCount: number
   connectedCount: number
   lastLaneChangeEvent: LaneChangeEvent | null
+  presequencingZones: PresequencingZone[]
   vehicles: VehicleState[]
   error: string | null
 }

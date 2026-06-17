@@ -14,6 +14,7 @@ DEFAULT_SCENARIO_CONFIG: Dict[str, object] = {
     "speedLimitKmh": 120,
     "randomSeed": 42,
     "enableCavLaneChangeControl": True,
+    "disableSumoLaneChangeControl": False,
     "scenarioPreset": "balanced",
 }
 
@@ -81,6 +82,10 @@ def validate_scenario_config(raw: Dict[str, Any] | None) -> Dict[str, object]:
         merged["enableCavLaneChangeControl"],
         "enableCavLaneChangeControl",
     )
+    disable_sumo_lane_change_control = _parse_bool(
+        merged["disableSumoLaneChangeControl"],
+        "disableSumoLaneChangeControl",
+    )
 
     _require_range(simulation_duration, "simulationDuration", minimum=1, maximum=7200)
     _require_range(step_length, "stepLength", minimum=0.001, maximum=1)
@@ -103,6 +108,7 @@ def validate_scenario_config(raw: Dict[str, Any] | None) -> Dict[str, object]:
         "speedLimitKmh": round(speed_limit, 2),
         "randomSeed": random_seed,
         "enableCavLaneChangeControl": enable_cav_control,
+        "disableSumoLaneChangeControl": disable_sumo_lane_change_control,
         "scenarioPreset": preset_name,
     }
 

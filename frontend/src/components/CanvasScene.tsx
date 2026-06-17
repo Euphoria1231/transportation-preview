@@ -2,13 +2,21 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
-import type { HeatmapMode, Lane, LaneMetric, NetworkConfig, VehicleState } from '../types/simulation'
+import type {
+  HeatmapMode,
+  Lane,
+  LaneMetric,
+  NetworkConfig,
+  PresequencingZone,
+  VehicleState,
+} from '../types/simulation'
 
 interface CanvasSceneProps {
   config: NetworkConfig | null
   vehicles: VehicleState[]
   laneMetrics?: LaneMetric[]
   heatmapMode?: HeatmapMode | null
+  presequencingZones?: PresequencingZone[]
   snapshotTick: number
   selectedVehicleId: string | null
   selectedLaneId: string | null
@@ -28,6 +36,7 @@ export function CanvasScene({
   vehicles,
   laneMetrics = [],
   heatmapMode = null,
+  presequencingZones = [],
   snapshotTick,
   selectedVehicleId,
   selectedLaneId,
@@ -99,6 +108,7 @@ export function CanvasScene({
 
       drawLanes(context, config, viewport)
       drawLaneHeatmap(context, config, laneMetrics, heatmapMode, viewport)
+      drawPresequencingZones(context, config, presequencingZones, viewport)
       if (selectedLaneId) {
         drawSelectedLane(context, config, selectedLaneId, viewport)
       }
@@ -122,6 +132,7 @@ export function CanvasScene({
     config,
     heatmapMode,
     laneMetrics,
+    presequencingZones,
     routePath,
     selectedLaneId,
     selectedVehicleId,
@@ -232,6 +243,74 @@ function drawLaneHeatmap(
     context.strokeStyle = heatmapColor(heatValue, metrics.riskLevel)
     context.lineWidth = (lane.edgeId.startsWith('E') ? 13 : 11) + 5
     context.stroke()
+  }
+
+  context.restore()
+}
+
+function drawPresequencingZones(
+  context: CanvasRenderingContext2D,
+  config: NetworkConfig,
+  zones: PresequencingZone[],
+  viewport: { scale: number; offsetX: number; offsetY: number },
+) {
+  if (zones.length === 0) {
+    return
+  }
+
+  context.save()
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.font = '600 11px Inter, system-ui, sans-serif'
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+
+  for (const zone of zones) {
+    const lanes = config.lanes.filter((lane) => lane.edgeId === zone.edgeId)
+    if (lanes.length === 0) {
+      continue
+    }
+
+    const alpha = zone.active ? 0.22 + zone.intensity * 0.32 : 0.08 + zone.intensity * 0.12
+    const color =
+      zone.intent === 'exit'
+        ? `rgba(245, 158, 11, ${alpha})`
+        : `rgba(14, 165, 233, ${alpha})`
+    const outline =
+      zone.intent === 'exit'
+        ? `rgba(251, 191, 36, ${Math.min(alpha + 0.24, 0.82)})`
+        : `rgba(56, 189, 248, ${Math.min(alpha + 0.24, 0.82)})`
+
+    for (const lane of lanes) {
+      traceLaneProgress(
+        context,
+        lane.shape,
+        viewport,
+        0,
+        zone.activeLengthFraction,
+      )
+      context.strokeStyle = color
+      context.lineWidth = zone.active ? 31 : 24
+      context.shadowColor = outline
+      context.shadowBlur = zone.active ? 14 : 4
+      context.stroke()
+
+      traceLaneProgress(
+        context,
+        lane.shape,
+        viewport,
+        0,
+        zone.activeLengthFraction,
+      )
+      context.strokeStyle = outline
+      context.lineWidth = zone.active ? 2.4 : 1.4
+      context.shadowBlur = 0
+      context.setLineDash(zone.active ? [] : [8, 8])
+      context.stroke()
+      context.setLineDash([])
+    }
+
+    drawZoneLabel(context, lanes, zone, viewport)
   }
 
   context.restore()
@@ -489,6 +568,72 @@ function drawRoutePath(
   context.stroke()
   context.setLineDash([])
   context.restore()
+}
+
+function drawZoneLabel(
+  context: CanvasRenderingContext2D,
+  lanes: Lane[],
+  zone: PresequencingZone,
+  viewport: { scale: number; offsetX: number; offsetY: number },
+) {
+  const lane = lanes[Math.floor(lanes.length / 2)]
+  if (!lane || lane.shape.length < 2) {
+    return
+  }
+
+  const [startX, startY] = lane.shape[0]
+  const [endX, endY] = lane.shape[lane.shape.length - 1]
+  const progress = Math.min(zone.activeLengthFraction * 0.5, 0.82)
+  const screen = worldToScreen(
+    lerp(startX, endX, progress),
+    lerp(startY, endY, progress),
+    viewport,
+  )
+  const label = `${zone.id} ${Math.round(zone.intensity * 100)}%`
+  const width = Math.max(context.measureText(label).width + 18, 58)
+  const height = 22
+
+  context.save()
+  context.fillStyle = zone.active ? 'rgba(15, 23, 42, 0.82)' : 'rgba(51, 65, 85, 0.72)'
+  context.strokeStyle =
+    zone.intent === 'exit' ? 'rgba(251, 191, 36, 0.72)' : 'rgba(56, 189, 248, 0.72)'
+  context.lineWidth = 1
+  roundRect(context, screen.x - width / 2, screen.y - height / 2, width, height, 8)
+  context.fill()
+  context.stroke()
+  context.fillStyle = '#f8fafc'
+  context.fillText(label, screen.x, screen.y + 0.5)
+  context.restore()
+}
+
+function traceLaneProgress(
+  context: CanvasRenderingContext2D,
+  shape: Array<[number, number]>,
+  viewport: { scale: number; offsetX: number; offsetY: number },
+  startProgress: number,
+  endProgress: number,
+) {
+  if (shape.length < 2) {
+    context.beginPath()
+    return
+  }
+
+  const [startX, startY] = shape[0]
+  const [endX, endY] = shape[shape.length - 1]
+  const start = worldToScreen(
+    lerp(startX, endX, Math.max(0, Math.min(startProgress, 1))),
+    lerp(startY, endY, Math.max(0, Math.min(startProgress, 1))),
+    viewport,
+  )
+  const end = worldToScreen(
+    lerp(startX, endX, Math.max(0, Math.min(endProgress, 1))),
+    lerp(startY, endY, Math.max(0, Math.min(endProgress, 1))),
+    viewport,
+  )
+
+  context.beginPath()
+  context.moveTo(start.x, start.y)
+  context.lineTo(end.x, end.y)
 }
 
 function traceLanePath(

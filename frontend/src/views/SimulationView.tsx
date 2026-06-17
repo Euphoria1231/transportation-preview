@@ -5,6 +5,7 @@ import { CanvasScene } from '../components/CanvasScene'
 import { ControlPanel } from '../components/ControlPanel'
 import { EventFeed } from '../components/EventFeed'
 import { InspectorPanel } from '../components/InspectorPanel'
+import { PresequencingPanel } from '../components/PresequencingPanel'
 import { ReportPanel } from '../components/ReportPanel'
 import { StatusPanel } from '../components/StatusPanelLight'
 import { useSimulationStream } from '../hooks/useSimulationStream'
@@ -228,6 +229,7 @@ export function SimulationView({
   const replaySnapshot = replayMode ? findSnapshotAt(history, replayPercent) : null
   const visibleSimulation = replaySnapshot?.state ?? simulation
   const visibleVehicles = visibleSimulation?.vehicles ?? []
+  const visiblePresequencingZones = visibleSimulation?.presequencingZones ?? []
   const laneMetrics = deriveLaneMetrics(config, visibleVehicles)
   const selectedVehicle = selectedVehicleId
     ? visibleVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null
@@ -285,6 +287,7 @@ export function SimulationView({
             heatmapMode={heatmapMode}
             laneMetrics={serverLaneMetrics}
             key={viewportResetTick}
+            presequencingZones={visiblePresequencingZones}
             snapshotTick={snapshotTick}
             onLaneSelect={handleLaneSelect}
             onVehicleSelect={handleVehicleSelect}
@@ -340,6 +343,7 @@ export function SimulationView({
           {activePanel === 'metrics' ? (
             <div className="space-y-4">
               <StatusPanel config={config} connectionStatus={connectionStatus} simulation={visibleSimulation} />
+              <PresequencingPanel zones={visiblePresequencingZones} />
               <EventFeed event={visibleSimulation?.lastLaneChangeEvent ?? null} />
             </div>
           ) : null}
@@ -434,6 +438,7 @@ function ScenarioSummaryPanel({
           <ScenarioMetric label="出口" value={`${Math.round(config.exitRatio * 100)}%`} />
           <ScenarioMetric label="限速" value={`${config.speedLimitKmh.toFixed(0)} km/h`} />
           <ScenarioMetric label="时长" value={formatDuration(config.simulationDuration)} />
+          <ScenarioMetric label="方案" value={formatControlMode(config)} />
         </div>
       ) : (
         <p className="text-sm text-slate-500">场景参数加载中。</p>
@@ -456,4 +461,14 @@ function formatDuration(seconds: number) {
     return `${Math.round(seconds / 3600)} h`
   }
   return `${seconds} s`
+}
+
+function formatControlMode(config: ScenarioConfig) {
+  if (config.enableCavLaneChangeControl && !config.disableSumoLaneChangeControl) {
+    return '协同调控'
+  }
+  if (!config.enableCavLaneChangeControl && !config.disableSumoLaneChangeControl) {
+    return '无控对照'
+  }
+  return config.enableCavLaneChangeControl ? '协同调控' : '换道关闭'
 }

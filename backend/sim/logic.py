@@ -44,6 +44,7 @@ def apply_lane_change_logic(connection, step: int) -> List[Dict[str, object]]:
             events.append(
                 {
                     "step": step,
+                    "zoneId": cond_edge,
                     "vehicleId": vehicle_id,
                     "fromEdge": edge_id,
                     "fromLane": lane_idx,

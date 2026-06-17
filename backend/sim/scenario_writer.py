@@ -57,42 +57,11 @@ def build_route_root(config: Dict[str, object]) -> ET.Element:
     flow_plan = derive_flow_plan(config)
     speed_limit = _format_number(flow_plan["speedLimitMetersPerSecond"])
     simulation_duration = str(int(config["simulationDuration"]))
+    no_algorithm_control = not bool(config.get("enableCavLaneChangeControl", True))
 
     routes = ET.Element("routes")
-    ET.SubElement(
-        routes,
-        "vType",
-        {
-            "id": "Connected",
-            "laneChangeModel": "SL2015",
-            "accel": "2.5",
-            "decel": "4.5",
-            "sigma": "0.0",
-            "length": "4.5",
-            "minGap": "3.0",
-            "maxSpeed": speed_limit,
-            "color": "0,255,0",
-        },
-    )
-    ET.SubElement(
-        routes,
-        "vType",
-        {
-            "id": "Human",
-            "laneChangeModel": "SL2015",
-            "lcStrategic": "100.0",
-            "lcCooperative": "1.0",
-            "lcSpeedGain": "0.0",
-            "lcKeepRight": "0.0",
-            "accel": "2.5",
-            "decel": "4.5",
-            "sigma": "0.0",
-            "length": "4.5",
-            "minGap": "3.0",
-            "maxSpeed": speed_limit,
-            "color": "255,0,0",
-        },
-    )
+    for vehicle_type in _build_vehicle_types(speed_limit, no_algorithm_control):
+        ET.SubElement(routes, "vType", vehicle_type)
 
     flows = [
         (
@@ -158,6 +127,73 @@ def build_route_root(config: Dict[str, object]) -> ET.Element:
         )
 
     return routes
+
+
+def _build_vehicle_types(speed_limit: str, no_algorithm_control: bool) -> list[Dict[str, str]]:
+    if no_algorithm_control:
+        return [
+            {
+                "id": "Connected",
+                "laneChangeModel": "SL2015",
+                "lcStrategic": "20.0",
+                "lcCooperative": "0.15",
+                "lcSpeedGain": "0.0",
+                "lcKeepRight": "0.0",
+                "accel": "2.0",
+                "decel": "4.0",
+                "sigma": "0.35",
+                "tau": "1.35",
+                "length": "4.5",
+                "minGap": "4.5",
+                "maxSpeed": speed_limit,
+                "color": "0,255,0",
+            },
+            {
+                "id": "Human",
+                "laneChangeModel": "SL2015",
+                "lcStrategic": "20.0",
+                "lcCooperative": "0.10",
+                "lcSpeedGain": "0.0",
+                "lcKeepRight": "0.0",
+                "accel": "1.8",
+                "decel": "3.8",
+                "sigma": "0.55",
+                "tau": "1.55",
+                "length": "4.5",
+                "minGap": "4.8",
+                "maxSpeed": speed_limit,
+                "color": "255,0,0",
+            },
+        ]
+
+    return [
+        {
+            "id": "Connected",
+            "laneChangeModel": "SL2015",
+            "accel": "2.5",
+            "decel": "4.5",
+            "sigma": "0.0",
+            "length": "4.5",
+            "minGap": "3.0",
+            "maxSpeed": speed_limit,
+            "color": "0,255,0",
+        },
+        {
+            "id": "Human",
+            "laneChangeModel": "SL2015",
+            "lcStrategic": "100.0",
+            "lcCooperative": "1.0",
+            "lcSpeedGain": "0.0",
+            "lcKeepRight": "0.0",
+            "accel": "2.5",
+            "decel": "4.5",
+            "sigma": "0.0",
+            "length": "4.5",
+            "minGap": "3.0",
+            "maxSpeed": speed_limit,
+            "color": "255,0,0",
+        },
+    ]
 
 
 def _write_sumocfg_file(sumocfg_path: Path, config: Dict[str, object], net_file_value: str) -> None:

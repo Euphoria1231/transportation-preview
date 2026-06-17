@@ -19,6 +19,22 @@ class FakeConnection:
         self._traci_module.active_labels.discard(self._label)
 
 
+class FakeVehicleApi:
+    def __init__(self) -> None:
+        self.mode_changes: list[tuple[str, int]] = []
+
+    def getIDList(self) -> list[str]:
+        return ["veh-a", "veh-b"]
+
+    def setLaneChangeMode(self, vehicle_id: str, mode: int) -> None:
+        self.mode_changes.append((vehicle_id, mode))
+
+
+class FakeLaneControlConnection:
+    def __init__(self) -> None:
+        self.vehicle = FakeVehicleApi()
+
+
 class FakeTraciModule:
     def __init__(self) -> None:
         self.active_labels: set[str] = set()
@@ -96,6 +112,18 @@ class RunnerTraciLifecycleTest(unittest.TestCase):
 
         self.assertIsNone(runner._connection)
         self.assertNotIn("browser", self.fake_traci.active_labels)
+
+    def test_debug_mode_can_disable_sumo_lane_change_for_active_vehicles(self) -> None:
+        runner = object.__new__(self.runner_module.SimulationRunner)
+        runner.disable_sumo_lane_change_control = True
+        runner._connection = FakeLaneControlConnection()
+
+        runner._apply_sumo_lane_change_permissions()
+
+        self.assertEqual(
+            runner._connection.vehicle.mode_changes,
+            [("veh-a", 0), ("veh-b", 0)],
+        )
 
 
 if __name__ == "__main__":
