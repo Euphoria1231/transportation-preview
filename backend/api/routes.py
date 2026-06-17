@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Blueprint, Response, jsonify, request, stream_with_context
+from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
 from backend.sim.runner import SimulationRunner
 
@@ -29,8 +29,8 @@ def create_api_blueprint(runner: SimulationRunner) -> Blueprint:
             return jsonify({"error": str(exc)}), 400
         except OSError as exc:
             return jsonify({"error": f"Failed to write generated scenario files: {exc}"}), 500
-        except RuntimeError as exc:
-            return jsonify({"error": f"Failed to start SUMO scenario: {exc}"}), 500
+        except Exception as exc:
+            return _simulation_error_response("Failed to start SUMO scenario", exc)
 
     @api.get("/stream")
     def stream():
@@ -88,25 +88,33 @@ def create_api_blueprint(runner: SimulationRunner) -> Blueprint:
     def start():
         try:
             return jsonify(runner.start())
-        except RuntimeError as exc:
-            return jsonify({"error": f"Failed to start SUMO simulation: {exc}"}), 500
+        except Exception as exc:
+            return _simulation_error_response("Failed to start SUMO simulation", exc)
 
     @api.post("/sim/pause")
     def pause():
-        return jsonify(runner.pause())
+        try:
+            return jsonify(runner.pause())
+        except Exception as exc:
+            return _simulation_error_response("Failed to pause SUMO simulation", exc)
 
     @api.post("/sim/reset")
     def reset():
         try:
             return jsonify(runner.reset())
-        except RuntimeError as exc:
-            return jsonify({"error": f"Failed to reset SUMO simulation: {exc}"}), 500
+        except Exception as exc:
+            return _simulation_error_response("Failed to reset SUMO simulation", exc)
 
     @api.post("/sim/step")
     def step():
         try:
             return jsonify(runner.step_once())
-        except RuntimeError as exc:
-            return jsonify({"error": f"Failed to step SUMO simulation: {exc}"}), 500
+        except Exception as exc:
+            return _simulation_error_response("Failed to step SUMO simulation", exc)
 
     return api
+
+
+def _simulation_error_response(message: str, exc: Exception):
+    current_app.logger.exception("%s: %s", message, exc)
+    return jsonify({"error": f"{message}: {exc}"}), 500

@@ -1,6 +1,7 @@
 import type { Lane, LaneMetrics, NetworkConfig, SimulationSnapshot, SimulationState, VehicleState } from '../types/simulation'
 
 export const HISTORY_WINDOW_MS = 60_000
+export const HISTORY_MAX_SNAPSHOTS = 300
 
 export function appendSnapshot(
   history: SimulationSnapshot[],
@@ -8,13 +9,16 @@ export function appendSnapshot(
   capturedAt = Date.now(),
 ) {
   const cutoff = capturedAt - HISTORY_WINDOW_MS
-  return [
+  const nextHistory = [
     ...history.filter((snapshot) => snapshot.capturedAt >= cutoff),
     {
       capturedAt,
       state,
     },
   ]
+  return nextHistory.length > HISTORY_MAX_SNAPSHOTS
+    ? nextHistory.slice(-HISTORY_MAX_SNAPSHOTS)
+    : nextHistory
 }
 
 export function findSnapshotAt(

@@ -46,16 +46,21 @@ class SimulationRunner:
         self._lock = threading.RLock()
         self._condition = threading.Condition(self._lock)
         self._connection = None
+        self._traci_label = TRACI_LABEL
+        self._traci_label_counter = 0
         self._running = False
         self._alive = True
         self._state_version = 0
         self._step = 0
         self._error: Optional[str] = None
+        self._last_publish_at = 0.0
+        self._publish_interval = 0.2
         self._last_lane_change_event: Optional[Dict[str, object]] = None
         self._metric_history: Deque[Dict[str, object]] = deque(maxlen=1000)
         self._latest_metrics: Optional[Dict[str, object]] = None
         self._baseline_summary: Optional[Dict[str, object]] = None
         self._vehicle_ids_seen: set[str] = set()
+        self._vehicle_route_cache: Dict[str, List[str]] = {}
         self._latest_state = self._empty_state()
 
         self._thread = threading.Thread(target=self._loop, name="sumo-runner", daemon=True)
@@ -239,10 +244,7 @@ class SimulationRunner:
                 try:
                     self._advance_one_step()
                 except Exception as exc:  # pragma: no cover
-                    self._running = False
-                    self._error = str(exc)
-                    self._latest_state = self._snapshot_state()
-                    self._bump_state_version()
+                    self._handle_runtime_error(exc)
 
             elapsed = time.perf_counter() - start_time
             time.sleep(max(self.step_length - elapsed, 0.01))
@@ -266,7 +268,14 @@ class SimulationRunner:
         self._latest_state = self._snapshot_state()
         self._append_metric_sample(events)
         self._step += 1
-        self._bump_state_version()
+        if self._simulation_finished():
+            self._running = False
+            self._latest_state["running"] = False
+            self._publish_state(force=True)
+            self._close_connection(clear_state=False)
+            return
+
+        self._publish_state()
 
     def _ensure_connection(self) -> None:
         if self._connection is not None:
@@ -280,13 +289,16 @@ class SimulationRunner:
             "--seed",
             str(self.current_scenario_config["randomSeed"]),
         ]
+        self._close_current_traci_label()
+        next_label = self._next_traci_label()
         try:
-            traci.start(cmd, label=TRACI_LABEL)
-            self._connection = traci.getConnection(TRACI_LABEL)
+            traci.start(cmd, label=next_label)
+            self._traci_label = next_label
+            self._connection = traci.getConnection(next_label)
             self._latest_state = self._snapshot_state()
         except Exception:
             self._connection = None
-            self._close_traci_label()
+            self._close_traci_label(next_label)
             self._latest_state = self._empty_state()
             raise
 
@@ -316,9 +328,28 @@ class SimulationRunner:
                 None,
             )
 
-    def _close_connection(self) -> None:
+    def _handle_runtime_error(self, exc: Exception) -> None:
+        self._running = False
+        self._error = str(exc)
+        self._close_connection()
+        self._publish_state(force=True)
+
+    def _simulation_finished(self) -> bool:
+        if self._connection is None:
+            return False
+        return bool(
+            self._safe_value(
+                lambda: self._connection.simulation.getMinExpectedNumber() <= 0,
+                False,
+            )
+        )
+
+    def _close_connection(self, clear_state: bool = True) -> None:
         connection = self._connection
         self._connection = None
+        route_cache = getattr(self, "_vehicle_route_cache", None)
+        if route_cache is not None:
+            route_cache.clear()
 
         if connection is not None:
             try:
@@ -326,14 +357,25 @@ class SimulationRunner:
             except Exception:
                 pass
 
-        self._close_traci_label()
+        self._close_current_traci_label()
 
-        self._latest_state = self._empty_state()
+        if clear_state:
+            self._latest_state = self._empty_state()
+
+    def _close_current_traci_label(self) -> None:
+        current_label = getattr(self, "_traci_label", TRACI_LABEL)
+        self._close_traci_label(current_label)
+        if current_label != TRACI_LABEL:
+            self._close_traci_label(TRACI_LABEL)
+
+    def _next_traci_label(self) -> str:
+        self._traci_label_counter = getattr(self, "_traci_label_counter", 0) + 1
+        return f"{TRACI_LABEL}-{self._traci_label_counter}"
 
     @staticmethod
-    def _close_traci_label() -> None:
+    def _close_traci_label(label: str) -> None:
         try:
-            traci.switch(TRACI_LABEL)
+            traci.switch(label)
             traci.close(False)
         except Exception:
             pass
@@ -368,6 +410,13 @@ class SimulationRunner:
         for vehicle_id in vehicle_ids:
             vehicle_type = self._connection.vehicle.getTypeID(vehicle_id)
             x_coord, y_coord = self._connection.vehicle.getPosition(vehicle_id)
+            route = self._vehicle_route_cache.get(vehicle_id)
+            if route is None:
+                route = list(self._safe_value(
+                    lambda vehicle_id=vehicle_id: self._connection.vehicle.getRoute(vehicle_id),
+                    [],
+                ))
+                self._vehicle_route_cache[vehicle_id] = route
             leader = self._safe_value(
                 lambda vehicle_id=vehicle_id: self._connection.vehicle.getLeader(vehicle_id, 250),
                 None,
@@ -404,10 +453,7 @@ class SimulationRunner:
                     ),
                     "length": self._connection.vehicle.getLength(vehicle_id),
                     "width": self._connection.vehicle.getWidth(vehicle_id),
-                    "route": list(self._safe_value(
-                        lambda vehicle_id=vehicle_id: self._connection.vehicle.getRoute(vehicle_id),
-                        [],
-                    )),
+                    "route": list(route),
                     "leaderId": leader_id,
                     "leaderGap": leader_gap,
                     "isChangingLane": abs(float(lateral_speed)) > 0.05,
@@ -474,6 +520,12 @@ class SimulationRunner:
     def _bump_state_version(self) -> None:
         self._state_version += 1
         self._condition.notify_all()
+
+    def _publish_state(self, force: bool = False) -> None:
+        now = time.perf_counter()
+        if force or now - self._last_publish_at >= self._publish_interval:
+            self._last_publish_at = now
+            self._bump_state_version()
 
     @staticmethod
     def _format_sse(event_name: str, payload: Dict[str, object]) -> str:

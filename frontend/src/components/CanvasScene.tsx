@@ -310,7 +310,6 @@ function drawPresequencingZones(
       context.setLineDash([])
     }
 
-    drawZoneLabel(context, lanes, zone, viewport)
   }
 
   context.restore()
@@ -567,42 +566,6 @@ function drawRoutePath(
   })
   context.stroke()
   context.setLineDash([])
-  context.restore()
-}
-
-function drawZoneLabel(
-  context: CanvasRenderingContext2D,
-  lanes: Lane[],
-  zone: PresequencingZone,
-  viewport: { scale: number; offsetX: number; offsetY: number },
-) {
-  const lane = lanes[Math.floor(lanes.length / 2)]
-  if (!lane || lane.shape.length < 2) {
-    return
-  }
-
-  const [startX, startY] = lane.shape[0]
-  const [endX, endY] = lane.shape[lane.shape.length - 1]
-  const progress = Math.min(zone.activeLengthFraction * 0.5, 0.82)
-  const screen = worldToScreen(
-    lerp(startX, endX, progress),
-    lerp(startY, endY, progress),
-    viewport,
-  )
-  const label = `${zone.id} ${Math.round(zone.intensity * 100)}%`
-  const width = Math.max(context.measureText(label).width + 18, 58)
-  const height = 22
-
-  context.save()
-  context.fillStyle = zone.active ? 'rgba(15, 23, 42, 0.82)' : 'rgba(51, 65, 85, 0.72)'
-  context.strokeStyle =
-    zone.intent === 'exit' ? 'rgba(251, 191, 36, 0.72)' : 'rgba(56, 189, 248, 0.72)'
-  context.lineWidth = 1
-  roundRect(context, screen.x - width / 2, screen.y - height / 2, width, height, 8)
-  context.fill()
-  context.stroke()
-  context.fillStyle = '#f8fafc'
-  context.fillText(label, screen.x, screen.y + 0.5)
   context.restore()
 }
 

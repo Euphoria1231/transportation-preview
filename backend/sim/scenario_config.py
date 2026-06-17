@@ -21,7 +21,7 @@ DEFAULT_SCENARIO_CONFIG: Dict[str, object] = {
 SCENARIO_PRESETS: Dict[str, Dict[str, object]] = {
     "balanced": {},
     "high-flow": {
-        "totalFlow": 4800,
+        "totalFlow": 8000,
         "cavPenetrationRate": 0.5,
         "mainlineRatio": 0.78,
         "exitRatio": 0.2,
@@ -89,7 +89,7 @@ def validate_scenario_config(raw: Dict[str, Any] | None) -> Dict[str, object]:
 
     _require_range(simulation_duration, "simulationDuration", minimum=1, maximum=7200)
     _require_range(step_length, "stepLength", minimum=0.001, maximum=1)
-    _require_range(total_flow, "totalFlow", minimum=0, maximum=10000)
+    _require_range(total_flow, "totalFlow", minimum=0, maximum=8000)
     _require_range(cav_rate, "cavPenetrationRate", minimum=0, maximum=1)
     _require_range(mainline_ratio, "mainlineRatio", minimum=0, maximum=1)
     _require_range(exit_ratio, "exitRatio", minimum=0, maximum=1)

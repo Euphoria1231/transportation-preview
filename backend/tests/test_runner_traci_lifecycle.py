@@ -113,6 +113,55 @@ class RunnerTraciLifecycleTest(unittest.TestCase):
         self.assertIsNone(runner._connection)
         self.assertNotIn("browser", self.fake_traci.active_labels)
 
+    def test_connection_initialization_clears_stale_browser_label_before_start(self) -> None:
+        runner = object.__new__(self.runner_module.SimulationRunner)
+        runner._connection = None
+        runner._step = 0
+        runner._error = None
+        runner._latest_state = {}
+        runner.sumocfg_path = Path("scenario.sumocfg")
+        runner.current_scenario_config = {"randomSeed": 1}
+        runner._snapshot_state = lambda: {"running": False}
+        self.fake_traci.active_labels.add("browser")
+        self.fake_traci.current_label = "browser"
+
+        runner._ensure_connection()
+
+        self.assertIsNotNone(runner._connection)
+        self.assertNotIn("browser", self.fake_traci.active_labels)
+        self.assertIn("browser-1", self.fake_traci.active_labels)
+        self.assertEqual(runner._latest_state, {"running": False})
+
+    def test_runtime_error_releases_connection_without_killing_runner_state(self) -> None:
+        runner = object.__new__(self.runner_module.SimulationRunner)
+        runner._connection = FakeConnection(self.fake_traci, "browser-1")
+        runner._traci_label = "browser-1"
+        runner._step = 23
+        runner._running = True
+        runner._error = None
+        runner._latest_state = {"running": True}
+        runner._vehicle_route_cache = {"veh-a": ["L1", "E2"]}
+        runner._state_version = 0
+        runner._last_publish_at = 0.0
+        runner._publish_interval = 0.2
+        runner._condition = self.runner_module.threading.Condition(
+            self.runner_module.threading.RLock()
+        )
+        self.fake_traci.active_labels.add("browser-1")
+        self.fake_traci.current_label = "browser-1"
+
+        with runner._condition:
+            runner._handle_runtime_error(RuntimeError("SUMO connection closed"))
+
+        self.assertIsNone(runner._connection)
+        self.assertFalse(runner._running)
+        self.assertEqual(runner._error, "SUMO connection closed")
+        self.assertEqual(runner._latest_state["running"], False)
+        self.assertEqual(runner._latest_state["error"], "SUMO connection closed")
+        self.assertEqual(runner._vehicle_route_cache, {})
+        self.assertNotIn("browser-1", self.fake_traci.active_labels)
+        self.assertEqual(runner._state_version, 1)
+
     def test_debug_mode_can_disable_sumo_lane_change_for_active_vehicles(self) -> None:
         runner = object.__new__(self.runner_module.SimulationRunner)
         runner.disable_sumo_lane_change_control = True

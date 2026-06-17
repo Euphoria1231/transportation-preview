@@ -39,7 +39,7 @@ const PRESETS: Array<{
     label: '高流量',
     description: '接近容量压力的总流量',
     values: {
-      totalFlow: 4800,
+      totalFlow: 8000,
       cavPenetrationRate: 0.5,
       mainlineRatio: 0.78,
       exitRatio: 0.2,
@@ -262,7 +262,7 @@ export function ScenarioSetupView({
               <section className="grid grid-cols-2 gap-4 max-xl:grid-cols-1">
                 <RangeField
                   label="总流量"
-                  max={5000}
+                  max={8000}
                   min={500}
                   onChange={(value) => updateConfig({ totalFlow: value })}
                   suffix="veh/h"

@@ -41,6 +41,15 @@ class ScenarioConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_scenario_config({"speedLimitKmh": 200})
 
+    def test_total_flow_allows_up_to_eight_thousand(self) -> None:
+        config = validate_scenario_config({"totalFlow": 8000})
+
+        self.assertEqual(config["totalFlow"], 8000)
+
+    def test_total_flow_rejects_values_above_eight_thousand(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_scenario_config({"totalFlow": 8001})
+
     def test_validate_accepts_no_algorithm_comparison_mode(self) -> None:
         config = validate_scenario_config(
             {
