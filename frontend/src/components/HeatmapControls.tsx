@@ -9,7 +9,7 @@ const HEATMAP_OPTIONS: Array<{ mode: HeatmapMode; label: string; note: string }>
   { mode: 'speed', label: '速度', note: '低速更深' },
   { mode: 'density', label: '密度', note: '辆/km' },
   { mode: 'congestion', label: '拥堵', note: '排队/占有率' },
-  { mode: 'risk', label: '风险', note: 'TTC/急刹' },
+  { mode: 'risk', label: '风险', note: 'TTC/风险' },
   { mode: 'emission', label: '排放 proxy', note: '估算' },
   { mode: 'laneChangeFrequency', label: '变道频率', note: 'step 内' },
 ]

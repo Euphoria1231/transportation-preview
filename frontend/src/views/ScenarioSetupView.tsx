@@ -24,11 +24,22 @@ const PRESETS: Array<{
   values: Partial<ScenarioConfig>
 }> = [
   {
+    id: 'low-flow',
+    label: '低流量',
+    description: '三主一支的轻负荷基准',
+    values: {
+      totalFlow: 4500,
+      cavPenetrationRate: 0.5,
+      mainlineRatio: 0.75,
+      exitRatio: 0.2,
+    },
+  },
+  {
     id: 'balanced',
     label: '均衡场景',
     description: '主路与匝道保持常规比例',
     values: {
-      totalFlow: 3000,
+      totalFlow: 6000,
       cavPenetrationRate: 0.5,
       mainlineRatio: 0.75,
       exitRatio: 0.2,
@@ -39,7 +50,7 @@ const PRESETS: Array<{
     label: '高流量',
     description: '接近容量压力的总流量',
     values: {
-      totalFlow: 8000,
+      totalFlow: 7500,
       cavPenetrationRate: 0.5,
       mainlineRatio: 0.78,
       exitRatio: 0.2,
@@ -50,7 +61,7 @@ const PRESETS: Array<{
     label: '高 CAV',
     description: '较高联网车辆渗透率',
     values: {
-      totalFlow: 3000,
+      totalFlow: 6000,
       cavPenetrationRate: 0.8,
       mainlineRatio: 0.75,
       exitRatio: 0.2,
@@ -61,7 +72,7 @@ const PRESETS: Array<{
     label: '低 CAV',
     description: '以人工驾驶车辆为主',
     values: {
-      totalFlow: 3000,
+      totalFlow: 6000,
       cavPenetrationRate: 0.2,
       mainlineRatio: 0.75,
       exitRatio: 0.2,
@@ -72,7 +83,7 @@ const PRESETS: Array<{
     label: '匝道偏重',
     description: '支路汇入压力更明显',
     values: {
-      totalFlow: 3200,
+      totalFlow: 6000,
       cavPenetrationRate: 0.5,
       mainlineRatio: 0.6,
       exitRatio: 0.18,
@@ -83,7 +94,7 @@ const PRESETS: Array<{
     label: '出口偏重',
     description: '主路出口分流比例更高',
     values: {
-      totalFlow: 3200,
+      totalFlow: 6000,
       cavPenetrationRate: 0.5,
       mainlineRatio: 0.78,
       exitRatio: 0.4,

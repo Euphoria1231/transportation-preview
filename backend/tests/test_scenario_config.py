@@ -2,11 +2,29 @@ from __future__ import annotations
 
 import unittest
 
-from backend.sim.scenario_config import derive_flow_plan, validate_scenario_config
+from backend.sim.scenario_config import (
+    derive_flow_plan,
+    get_default_scenario_config,
+    validate_scenario_config,
+)
 from backend.sim.scenario_writer import build_route_root, build_sumocfg_root
 
 
 class ScenarioConfigTest(unittest.TestCase):
+    def test_default_total_flow_uses_balanced_three_mainline_one_ramp_baseline(self) -> None:
+        config = get_default_scenario_config()
+
+        self.assertEqual(config["totalFlow"], 6000)
+
+    def test_flow_presets_cover_low_balanced_and_high_loads(self) -> None:
+        low_flow = validate_scenario_config({"scenarioPreset": "low-flow"})
+        balanced = validate_scenario_config({"scenarioPreset": "balanced"})
+        high_flow = validate_scenario_config({"scenarioPreset": "high-flow"})
+
+        self.assertEqual(low_flow["totalFlow"], 4500)
+        self.assertEqual(balanced["totalFlow"], 6000)
+        self.assertEqual(high_flow["totalFlow"], 7500)
+
     def test_validate_derives_ramp_ratio_and_flow_plan(self) -> None:
         config = validate_scenario_config(
             {

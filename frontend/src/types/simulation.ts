@@ -22,6 +22,7 @@ export interface NetworkConfig {
 }
 
 export type ScenarioPreset =
+  | 'low-flow'
   | 'balanced'
   | 'high-flow'
   | 'high-cav'

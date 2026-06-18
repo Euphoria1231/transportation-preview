@@ -140,7 +140,6 @@ export function AnalysisPanel({
           <div className="grid grid-cols-2 gap-2">
             <SummaryMetric label="平均速度" value={`${summary.averageSpeedKmh.toFixed(1)} km/h`} />
             <SummaryMetric label="平均延误" value={`${summary.averageDelay.toFixed(2)} s`} />
-            <SummaryMetric label="急刹" value={`${summary.totalHardBrakes} 次`} />
             <SummaryMetric label="高风险" value={`${summary.totalHighRiskEvents} 次`} />
             <SummaryMetric label="最小 TTC" value={summary.minTtc === null ? '--' : `${summary.minTtc.toFixed(2)} s`} />
             <SummaryMetric label="CAV" value={`${(summary.cavPenetrationRate * 100).toFixed(0)}%`} />

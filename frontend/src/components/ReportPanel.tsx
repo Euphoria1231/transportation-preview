@@ -256,13 +256,6 @@ function JudgeComparisonCard({
             unit="s"
           />
           <ComparisonMetricRow
-            baseline={baseline.totalHardBrakes}
-            current={summary.totalHardBrakes}
-            label="急刹事件"
-            positiveDirection="lower"
-            unit="次"
-          />
-          <ComparisonMetricRow
             baseline={baseline.totalHighRiskEvents}
             current={summary.totalHighRiskEvents}
             label="高风险事件"
@@ -359,7 +352,7 @@ function SimulationReportView({ report }: { report: SimulationReport }) {
       <ReportLine label="场景" value={report.scenarioName} />
       <ReportLine label="平均速度" value={`${report.averageSpeedKmh.toFixed(1)} km/h`} />
       <ReportLine label="平均延误" value={`${report.averageDelay.toFixed(2)} s`} />
-      <ReportLine label="急刹 / 高风险" value={`${report.totalHardBrakes} / ${report.totalHighRiskEvents} 次`} />
+      <ReportLine label="高风险事件" value={`${report.totalHighRiskEvents} 次`} />
       <ReportLine label="拥堵摘要" value={report.congestionSummary} />
       <ReportLine label="风险摘要" value={report.riskSummary} />
       <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 leading-6 text-slate-800">
@@ -381,7 +374,6 @@ function ComparisonReportView({ report }: { report: ComparisonReport }) {
       />
       <ReportLine label="速度变化" value={formatDelta(report.deltas.averageSpeedChangePercent, report.deltas.averageSpeedAbsoluteChange, 'km/h')} />
       <ReportLine label="延误变化" value={formatDelta(report.deltas.averageDelayChangePercent, report.deltas.averageDelayAbsoluteChange, 's')} />
-      <ReportLine label="急刹变化" value={formatDelta(report.deltas.hardBrakeChangePercent, report.deltas.hardBrakeAbsoluteChange, '次')} />
       <ReportLine label="高风险变化" value={formatDelta(report.deltas.highRiskEventChangePercent, report.deltas.highRiskEventAbsoluteChange, '次')} />
       <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 leading-6 text-slate-800">
         {report.conclusion}
@@ -512,7 +504,6 @@ function simulationToMarkdown(report: SimulationReport) {
     `- 仿真时长: ${report.simulationDuration} s`,
     `- 平均速度: ${report.averageSpeedKmh} km/h`,
     `- 平均延误: ${report.averageDelay} s`,
-    `- 急刹事件: ${report.totalHardBrakes} 次`,
     `- 高风险事件: ${report.totalHighRiskEvents} 次`,
     `- 最小 TTC: ${report.minTtc ?? '--'} s`,
     '',
@@ -532,7 +523,6 @@ function comparisonToMarkdown(report: ComparisonReport) {
     `- 当前模式: ${formatScenarioMode(report.experimentSummary.scenarioConfig)}`,
     `- 平均速度变化: ${formatDelta(report.deltas.averageSpeedChangePercent, report.deltas.averageSpeedAbsoluteChange, 'km/h')}`,
     `- 平均延误变化: ${formatDelta(report.deltas.averageDelayChangePercent, report.deltas.averageDelayAbsoluteChange, 's')}`,
-    `- 急刹事件变化: ${formatDelta(report.deltas.hardBrakeChangePercent, report.deltas.hardBrakeAbsoluteChange, '次')}`,
     `- 高风险事件变化: ${formatDelta(report.deltas.highRiskEventChangePercent, report.deltas.highRiskEventAbsoluteChange, '次')}`,
     '',
     `结论: ${report.conclusion}`,

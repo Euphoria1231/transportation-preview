@@ -6,7 +6,7 @@ from typing import Any, Dict
 DEFAULT_SCENARIO_CONFIG: Dict[str, object] = {
     "simulationDuration": 300,
     "stepLength": 0.1,
-    "totalFlow": 3000,
+    "totalFlow": 6000,
     "cavPenetrationRate": 0.5,
     "mainlineRatio": 0.75,
     "rampRatio": 0.25,
@@ -19,33 +19,39 @@ DEFAULT_SCENARIO_CONFIG: Dict[str, object] = {
 }
 
 SCENARIO_PRESETS: Dict[str, Dict[str, object]] = {
+    "low-flow": {
+        "totalFlow": 4500,
+        "cavPenetrationRate": 0.5,
+        "mainlineRatio": 0.75,
+        "exitRatio": 0.2,
+    },
     "balanced": {},
     "high-flow": {
-        "totalFlow": 8000,
+        "totalFlow": 7500,
         "cavPenetrationRate": 0.5,
         "mainlineRatio": 0.78,
         "exitRatio": 0.2,
     },
     "high-cav": {
-        "totalFlow": 3000,
+        "totalFlow": 6000,
         "cavPenetrationRate": 0.8,
         "mainlineRatio": 0.75,
         "exitRatio": 0.2,
     },
     "low-cav": {
-        "totalFlow": 3000,
+        "totalFlow": 6000,
         "cavPenetrationRate": 0.2,
         "mainlineRatio": 0.75,
         "exitRatio": 0.2,
     },
     "ramp-heavy": {
-        "totalFlow": 3200,
+        "totalFlow": 6000,
         "cavPenetrationRate": 0.5,
         "mainlineRatio": 0.6,
         "exitRatio": 0.18,
     },
     "exit-heavy": {
-        "totalFlow": 3200,
+        "totalFlow": 6000,
         "cavPenetrationRate": 0.5,
         "mainlineRatio": 0.78,
         "exitRatio": 0.4,

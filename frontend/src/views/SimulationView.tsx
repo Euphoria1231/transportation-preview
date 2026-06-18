@@ -287,7 +287,6 @@ export function SimulationView({
             heatmapMode={heatmapMode}
             laneMetrics={serverLaneMetrics}
             key={viewportResetTick}
-            presequencingZones={visiblePresequencingZones}
             snapshotTick={snapshotTick}
             onLaneSelect={handleLaneSelect}
             onVehicleSelect={handleVehicleSelect}
